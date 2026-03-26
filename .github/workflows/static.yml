@@ -36,8 +36,9 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: './ui/index'
+          # Upload the checked-in static viewer bundle. The bundle root contains
+          # index.html plus the related asset directories.
+          path: './ui'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
