@@ -1,13 +1,12 @@
+ [![Docs](https://app.readthedocs.org/projects/leodust/badge/?version=latest?version=latest)](https://leoflow-store.readthedocs.io)
+ 
 # LeoDust
 
 LeoDust is a TLE-driven space-ground network simulator with precomputed snapshot playback and a browser viewer.
 
 Full documentation:
 
-- [MkDocs Home](./docs/index.md)
-- [First Simulation Tutorial](./docs/tutorials/first-simulation.md)
-- [Configuration Reference](./docs/reference/configuration.md)
-- [Runtime Components](./docs/reference/runtime-components.md)
+- [Documentation](https://leodust.readthedocs.io/en/latest/)
 
 ## Quick Start
 
