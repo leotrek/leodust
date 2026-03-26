@@ -1,0 +1,68 @@
+{
+  "SelectedID": "precomputed_data-0250",
+  "Snapshots": [
+    {
+      "ID": "precomputed_data-0250",
+      "Name": "precomputed_data-0250",
+      "Filename": "precomputed_data-0250.gob.json",
+      "Path": "./snapshots/precomputed_data-0250.gob.json",
+      "SatelliteCount": 250,
+      "GroundCount": 85,
+      "FrameCount": 10
+    },
+    {
+      "ID": "precomputed_data-0500",
+      "Name": "precomputed_data-0500",
+      "Filename": "precomputed_data-0500.gob.json",
+      "Path": "./snapshots/precomputed_data-0500.gob.json",
+      "SatelliteCount": 500,
+      "GroundCount": 85,
+      "FrameCount": 10
+    },
+    {
+      "ID": "precomputed_data-1000",
+      "Name": "precomputed_data-1000",
+      "Filename": "precomputed_data-1000.gob.json",
+      "Path": "./snapshots/precomputed_data-1000.gob.json",
+      "SatelliteCount": 1000,
+      "GroundCount": 85,
+      "FrameCount": 10
+    },
+    {
+      "ID": "precomputed_data-2000",
+      "Name": "precomputed_data-2000",
+      "Filename": "precomputed_data-2000.gob.json",
+      "Path": "./snapshots/precomputed_data-2000.gob.json",
+      "SatelliteCount": 2000,
+      "GroundCount": 85,
+      "FrameCount": 10
+    },
+    {
+      "ID": "precomputed_data-3000",
+      "Name": "precomputed_data-3000",
+      "Filename": "precomputed_data-3000.gob.json",
+      "Path": "./snapshots/precomputed_data-3000.gob.json",
+      "SatelliteCount": 3000,
+      "GroundCount": 85,
+      "FrameCount": 10
+    },
+    {
+      "ID": "precomputed_data-6000",
+      "Name": "precomputed_data-6000",
+      "Filename": "precomputed_data-6000.gob.json",
+      "Path": "./snapshots/precomputed_data-6000.gob.json",
+      "SatelliteCount": 6000,
+      "GroundCount": 85,
+      "FrameCount": 10
+    },
+    {
+      "ID": "precomputed_data-10000",
+      "Name": "precomputed_data-10000",
+      "Filename": "precomputed_data-10000.gob.json",
+      "Path": "./snapshots/precomputed_data-10000.gob.json",
+      "SatelliteCount": 9985,
+      "GroundCount": 85,
+      "FrameCount": 10
+    }
+  ]
+}

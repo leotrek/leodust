@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // DeploymentOrchestrator orchestrates deployment actions based on specifications.

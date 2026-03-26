@@ -3,7 +3,7 @@ package simplugin
 import (
 	"fmt"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 type SimPluginBuilder struct {

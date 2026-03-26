@@ -3,7 +3,7 @@ package stateplugin
 import (
 	"fmt"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.StatePluginBuilder = (*DefaultStatePluginBuilder)(nil)

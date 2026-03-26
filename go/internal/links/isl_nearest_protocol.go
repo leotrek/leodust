@@ -5,9 +5,9 @@ import (
 	"sort"
 	"sync"
 
-	configmod "github.com/keniack/stardustGo/configs"
-	linkmod "github.com/keniack/stardustGo/internal/links/linktypes"
-	"github.com/keniack/stardustGo/pkg/types"
+	configmod "github.com/leotrek/leodust/configs"
+	linkmod "github.com/leotrek/leodust/internal/links/linktypes"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.InterSatelliteLinkProtocol = (*IslNearestProtocol)(nil)

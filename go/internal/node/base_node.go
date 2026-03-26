@@ -3,7 +3,7 @@ package node
 import (
 	"math"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // Node defines a common interface/base for satellites and ground stations

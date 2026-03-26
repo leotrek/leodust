@@ -3,7 +3,7 @@ package node
 import (
 	"time"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.Satellite = (*PrecomputedSatellite)(nil)

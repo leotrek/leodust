@@ -1,12 +1,9 @@
 package ground
 
 import (
-	"log"
 	"os"
 
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/internal/links"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,24 +11,19 @@ type rawGroundStation struct {
 	Name          string  `yaml:"Name"`
 	Lat           float64 `yaml:"Lat"`
 	Lon           float64 `yaml:"Lon"`
+	Alt           float64 `yaml:"Alt"`
 	Protocol      string  `yaml:"Protocol"`
-	Router        string  `yaml:"Router"`
 	ComputingType string  `yaml:"ComputingType"`
 }
 
 // GroundStationYmlLoader is responsible for loading ground station configurations from a YAML file.
 type GroundStationYmlLoader struct {
-	config               configs.GroundLinkConfig
 	groundStationBuilder *GroundStationBuilder
 }
 
 // NewGroundStationYmlLoader initializes a new GroundStationYmlLoader.
-func NewGroundStationYmlLoader(
-	config configs.GroundLinkConfig,
-	builder *GroundStationBuilder,
-) *GroundStationYmlLoader {
+func NewGroundStationYmlLoader(builder *GroundStationBuilder) *GroundStationYmlLoader {
 	return &GroundStationYmlLoader{
-		config:               config,
 		groundStationBuilder: builder,
 	}
 }
@@ -40,7 +32,6 @@ func NewGroundStationYmlLoader(
 func (l *GroundStationYmlLoader) Load(path string, satellites []types.Satellite) ([]types.GroundStation, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("Failed to open ground station file: %v", err)
 		return nil, err
 	}
 	defer file.Close()
@@ -48,23 +39,22 @@ func (l *GroundStationYmlLoader) Load(path string, satellites []types.Satellite)
 	var groundStations []rawGroundStation
 	decoder := yaml.NewDecoder(file)
 	if err := decoder.Decode(&groundStations); err != nil {
-		log.Fatalf("Failed to decode ground station YAML: %v", err)
 		return nil, err
 	}
 
 	var result []types.GroundStation
 	for _, gs := range groundStations {
-		station := l.groundStationBuilder.
-			SetName(gs.Name).
-			SetLatitude(gs.Lat).
-			SetLongitude(gs.Lon).
-			SetComputingType(gs.ComputingType).
-			ConfigureGroundLinkProtocol(func(p *links.GroundProtocolBuilder) *links.GroundProtocolBuilder {
-				return p.
-					SetProtocol(gs.Protocol).
-					SetSatellites(satellites)
-			}).
-			Build()
+		station, err := l.groundStationBuilder.Build(GroundStationSpec{
+			Name:          gs.Name,
+			Latitude:      gs.Lat,
+			Longitude:     gs.Lon,
+			Altitude:      gs.Alt,
+			Protocol:      gs.Protocol,
+			ComputingType: gs.ComputingType,
+		}, satellites)
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, station)
 	}
 

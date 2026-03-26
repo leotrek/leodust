@@ -6,13 +6,13 @@ package satellite
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 
-	"github.com/keniack/stardustGo/internal/links/linktypes"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/internal/links/linktypes"
+	"github.com/leotrek/leodust/pkg/logging"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // SatelliteConstellationLoader manages data source loaders (e.g., TLE) and loads satellite data.
@@ -34,7 +34,7 @@ func (s *SatelliteConstellationLoader) RegisterDataSourceLoader(sourceType strin
 
 // LoadSatelliteConstellation loads and parses satellites using a registered loader.
 func (s *SatelliteConstellationLoader) LoadSatelliteConstellation(dataSource string, sourceType string) ([]types.Satellite, error) {
-	log.Printf("Loading satellite constellation from %s (%s)", dataSource, sourceType)
+	logging.Infof("Loading satellite constellation from %s (%s)", dataSource, sourceType)
 
 	reader, err := openDataSource(dataSource)
 	if err != nil {
@@ -52,32 +52,30 @@ func (s *SatelliteConstellationLoader) LoadSatelliteConstellation(dataSource str
 		return nil, err
 	}
 
-	// Constellation awareness (connect to future links)
+	// Register every pair as a candidate ISL so the selected protocol can filter
+	// by distance and reachability later without re-scanning the constellation.
 	for i, sat := range satellites {
 		if len(sat.GetISLProtocol().Links()) != i {
-			log.Printf("Satellite %s has %d ISL links", sat.GetName(), len(sat.GetISLProtocol().Links()))
+			logging.Debugf("Satellite %s has %d candidate ISL links before wiring", sat.GetName(), len(sat.GetISLProtocol().Links()))
 		}
 
 		configureConstellation(sat, satellites[i+1:])
 	}
-	log.Printf("Loaded %d satellites", len(satellites))
+	logging.Infof("Loaded %d satellites", len(satellites))
 	return satellites, nil
 }
 
 // ConfigureConstellation configures a constellation of satellites by linking them.
 func configureConstellation(s types.Satellite, satellites []types.Satellite) {
 	for _, satellite := range satellites {
-		// Skip if it's the same satellite (this) or if there's already a link
-		if satellite == s { // Or add more conditions here if needed (e.g., checking existing links)
+		if satellite == s {
 			continue
 		}
 
-		// Create a new ISL link between the current satellite and the other one
 		link := linktypes.NewIslLink(s, satellite)
 
-		// Locking to ensure thread safety while modifying ISLProtocol
-		s.GetISLProtocol().AddLink(link)         // Add link to this satellite's ISL protocol
-		satellite.GetISLProtocol().AddLink(link) // Add link to the other satellite's ISL protocol
+		s.GetISLProtocol().AddLink(link)
+		satellite.GetISLProtocol().AddLink(link)
 	}
 }
 

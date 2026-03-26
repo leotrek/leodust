@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 type OnRouteResult struct {

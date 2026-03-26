@@ -1,90 +1,89 @@
 package ground
 
 import (
-	"time"
+	"fmt"
 
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/internal/computing"
-	"github.com/keniack/stardustGo/internal/links"
-	"github.com/keniack/stardustGo/internal/node"
-	"github.com/keniack/stardustGo/internal/routing"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/internal/computing"
+	"github.com/leotrek/leodust/internal/links"
+	"github.com/leotrek/leodust/internal/node"
+	"github.com/leotrek/leodust/internal/routing"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
-// GroundStationBuilder is a builder pattern implementation for creating ground stations.
-type GroundStationBuilder struct {
-	name      string
-	latitude  float64
-	longitude float64
-	altitude  float64
+// GroundStationSpec captures the per-station fields loaded from configuration.
+type GroundStationSpec struct {
+	Name          string
+	Latitude      float64
+	Longitude     float64
+	Altitude      float64
+	Protocol      string
+	ComputingType string
+}
 
-	simStartTime     time.Time
-	protocolBuilder  *links.GroundProtocolBuilder
+// GroundStationBuilder creates ground stations from immutable shared dependencies
+// and a per-station spec so one build cannot leak state into the next.
+type GroundStationBuilder struct {
+	groundLinkConfig configs.GroundLinkConfig
 	routerBuilder    *routing.RouterBuilder
 	computingBuilder *computing.DefaultComputingBuilder
 }
 
-// NewGroundStationBuilder initializes a new GroundStationBuilder
-func NewGroundStationBuilder(simStartTime time.Time, router *routing.RouterBuilder, computing *computing.DefaultComputingBuilder, config configs.GroundLinkConfig) *GroundStationBuilder {
+// NewGroundStationBuilder initializes a new GroundStationBuilder.
+func NewGroundStationBuilder(router *routing.RouterBuilder, computing *computing.DefaultComputingBuilder, config configs.GroundLinkConfig) *GroundStationBuilder {
 	return &GroundStationBuilder{
-		simStartTime:     simStartTime,
+		groundLinkConfig: config,
 		routerBuilder:    router,
 		computingBuilder: computing,
-		protocolBuilder:  links.NewGroundProtocolBuilder(config),
 	}
 }
 
-// SetName sets the name of the ground station and returns the builder for chaining.
-func (b *GroundStationBuilder) SetName(name string) *GroundStationBuilder {
-	b.name = name
-	return b
-}
-
-// SetLatitude sets the latitude coordinate of the ground station and returns the builder for chaining.
-func (b *GroundStationBuilder) SetLatitude(value float64) *GroundStationBuilder {
-	b.latitude = value
-	return b
-}
-
-// SetLongitude sets the longitude coordinate of the ground station and returns the builder for chaining.
-func (b *GroundStationBuilder) SetLongitude(value float64) *GroundStationBuilder {
-	b.longitude = value
-	return b
-}
-
-// SetAltitude sets the altitude of the ground station and returns the builder for chaining.
-func (b *GroundStationBuilder) SetAltitude(value float64) *GroundStationBuilder {
-	b.altitude = value
-	return b
-}
-
-// SetComputingType sets the computing type for the ground station and returns the builder for chaining.
-func (b *GroundStationBuilder) SetComputingType(value string) *GroundStationBuilder {
-	ctype, _ := types.ToComputingType(value)
-	b.computingBuilder.WithComputingType(ctype)
-	return b
-}
-
-// ConfigureGroundLinkProtocol allows for custom configuration of the ground link protocol.
-func (b *GroundStationBuilder) ConfigureGroundLinkProtocol(fn func(*links.GroundProtocolBuilder) *links.GroundProtocolBuilder) *GroundStationBuilder {
-	b.protocolBuilder = fn(b.protocolBuilder)
-	return b
-}
-
-// Build constructs and returns a new GroundStation using the configured properties.
-// It panics if the router cannot be built.
-func (b *GroundStationBuilder) Build() types.GroundStation {
+// Build constructs a ground station from one config record and the current satellite set.
+func (b *GroundStationBuilder) Build(spec GroundStationSpec, satellites []types.Satellite) (types.GroundStation, error) {
 	router, err := b.routerBuilder.Build()
 	if err != nil {
-		panic(err)
+		return nil, err
+	}
+
+	groundLinkConfig := b.groundLinkConfig
+	if spec.Protocol != "" {
+		groundLinkConfig.Protocol = spec.Protocol
+	}
+
+	protocol := links.NewGroundProtocolBuilder(groundLinkConfig).
+		SetSatellites(satellites).
+		Build()
+	if protocol == nil {
+		return nil, fmt.Errorf("unknown ground link protocol: %s", groundLinkConfig.Protocol)
+	}
+
+	computingResource, err := b.buildComputing(spec.ComputingType)
+	if err != nil {
+		return nil, err
 	}
 
 	return node.NewGroundStation(
-		b.name,
-		b.latitude,
-		b.longitude,
-		b.protocolBuilder.Build(),
-		b.simStartTime,
+		spec.Name,
+		spec.Latitude,
+		spec.Longitude,
+		spec.Altitude,
+		protocol,
 		router,
-		b.computingBuilder.Build())
+		computingResource,
+	), nil
+}
+
+// buildComputing applies the optional per-station override while keeping the shared
+// computing builder reusable across all stations.
+func (b *GroundStationBuilder) buildComputing(computingType string) (types.Computing, error) {
+	if computingType == "" {
+		return b.computingBuilder.Build(), nil
+	}
+
+	ctype, err := types.ToComputingType(computingType)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.computingBuilder.BuildWithType(ctype), nil
 }

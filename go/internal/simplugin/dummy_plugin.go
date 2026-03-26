@@ -1,9 +1,8 @@
 package simplugin
 
 import (
-	"log"
-
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/logging"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.SimulationPlugin = (*DummyPlugin)(nil)
@@ -16,10 +15,10 @@ func (p *DummyPlugin) Name() string {
 }
 
 func (p *DummyPlugin) PostSimulationStep(simulation types.SimulationController) error {
-	log.Println("DummyPlugin: PostSimulationStep called")
-	log.Println("Current Simulation Time:", simulation.GetSimulationTime())
-	log.Println("Number of Nodes:", len(simulation.GetAllNodes()))
-	log.Println("Number of Satellites:", len(simulation.GetSatellites()))
-	log.Println("Number of Ground Stations:", len(simulation.GetGroundStations()))
+	logging.Debugf("DummyPlugin: PostSimulationStep called")
+	logging.Debugf("Current Simulation Time: %s", simulation.GetSimulationTime())
+	logging.Debugf("Number of Nodes: %d", len(simulation.GetAllNodes()))
+	logging.Debugf("Number of Satellites: %d", len(simulation.GetSatellites()))
+	logging.Debugf("Number of Ground Stations: %d", len(simulation.GetGroundStations()))
 	return nil
 }

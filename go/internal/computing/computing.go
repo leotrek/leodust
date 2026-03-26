@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // Computing represents the computing resources of a node.
@@ -51,6 +51,8 @@ func (c *Computing) TryPlaceDeploymentAsync(service types.DeployableService) (bo
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Placement depends on the owning node for later simulator interactions, so
+	// fail early if the computing unit has not been attached yet.
 	if c.node == nil {
 		return false, fmt.Errorf("computing must be mounted to node before it can be used")
 	}
@@ -59,6 +61,8 @@ func (c *Computing) TryPlaceDeploymentAsync(service types.DeployableService) (bo
 		return false, nil
 	}
 
+	// Update the local resource snapshot before spawning the asynchronous follow-up
+	// work so later placement checks see the new usage immediately.
 	c.Services = append(c.Services, service)
 	c.CpuUsage += service.GetCpuUsage()
 	c.MemoryUsage += service.GetMemoryUsage()
@@ -131,7 +135,8 @@ func (c *Computing) MemoryAvailable() float64 {
 
 // Clone creates a new copy of the current computing unit and returns it as IComputing.
 func (c *Computing) Clone() types.Computing {
-	// Clone each deployed service
+	// Copy the slice so callers can mutate the clone without affecting the original
+	// accounting state.
 	servicesClone := make([]types.DeployableService, len(c.Services))
 	copy(servicesClone, c.Services)
 

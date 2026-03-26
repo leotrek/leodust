@@ -2,11 +2,12 @@ package links
 
 import (
 	"errors"
-	"slices"
+	"sort"
 	"sync"
 
-	"github.com/keniack/stardustGo/internal/links/linktypes"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/internal/links/linktypes"
+	"github.com/leotrek/leodust/pkg/logging"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.GroundSatelliteLinkProtocol = (*GroundSatelliteNearestProtocol)(nil)
@@ -49,7 +50,7 @@ func (p *GroundSatelliteNearestProtocol) DisconnectLink(link types.Link) error {
 	return nil
 }
 
-// UpdateLink selects the closest satellite and sets up the ground link accordingly.
+// UpdateLinks selects the closest visible satellite and updates the active ground link.
 func (p *GroundSatelliteNearestProtocol) UpdateLinks() ([]types.Link, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -61,14 +62,32 @@ func (p *GroundSatelliteNearestProtocol) UpdateLinks() ([]types.Link, error) {
 		return nil, errors.New("no satellites available")
 	}
 
-	slices.SortFunc(p.satellites, func(a types.Satellite, b types.Satellite) int {
-		var nodea types.Node = a
-		var nodeb types.Node = b
-		return int(p.groundStation.DistanceTo(nodea) - p.groundStation.DistanceTo(nodeb))
+	reachable := make([]types.Satellite, 0, len(p.satellites))
+	for _, satellite := range p.satellites {
+		// Filter below-horizon satellites before sorting by range so a geometrically
+		// closer but hidden satellite never wins the uplink.
+		if linktypes.NewGroundLink(p.groundStation, satellite).IsReachable() {
+			reachable = append(reachable, satellite)
+		}
+	}
+
+	if len(reachable) == 0 {
+		if p.link != nil {
+			p.link.Satellite.GetLinkNodeProtocol().DisconnectLink(p.link)
+			logging.Debugf("Ground station %s lost visibility to satellite %s", p.groundStation.GetName(), p.link.Satellite.GetName())
+			p.link = nil
+		}
+		return nil, nil
+	}
+
+	sort.Slice(reachable, func(i, j int) bool {
+		var nodeA types.Node = reachable[i]
+		var nodeB types.Node = reachable[j]
+		return p.groundStation.DistanceTo(nodeA) < p.groundStation.DistanceTo(nodeB)
 	})
 
-	var nearest = p.satellites[0]
-	if nearest == nil || (p.link != nil && p.link.Satellite.GetName() == nearest.GetName()) {
+	nearest := reachable[0]
+	if p.link != nil && p.link.Satellite.GetName() == nearest.GetName() {
 		return []types.Link{p.link}, nil // Already linked to the nearest
 	}
 
@@ -81,6 +100,11 @@ func (p *GroundSatelliteNearestProtocol) UpdateLinks() ([]types.Link, error) {
 	// Remove old link from previous satellite if supported
 	if old != nil {
 		old.Satellite.GetLinkNodeProtocol().DisconnectLink(old)
+	}
+	if old == nil {
+		logging.Debugf("Ground station %s connected to satellite %s", p.groundStation.GetName(), nearest.GetName())
+	} else {
+		logging.Debugf("Ground station %s switched uplink from %s to %s", p.groundStation.GetName(), old.Satellite.GetName(), nearest.GetName())
 	}
 
 	return []types.Link{p.link}, nil
@@ -103,6 +127,9 @@ func (p *GroundSatelliteNearestProtocol) Established() []types.Link {
 func (p *GroundSatelliteNearestProtocol) Link() types.Link {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.link == nil {
+		return nil
+	}
 	return p.link
 }
 

@@ -1,95 +1,84 @@
-# StardustGo Configuration Guide
+# LeoDust Configuration Reference
 
-This directory contains configuration files for the StardustGo Simulator. Each file defines specific aspects of the simulation, such as satellite behavior, routing, computing resources, and more.
+This directory contains bundled config files used by the simulator.
+
+For the maintained MkDocs documentation, start at [docs/index.md](../../../docs/index.md).
+
+Most useful pages:
+
+- [Configuration Reference](../../../docs/reference/configuration.md)
+- [Bundled Presets](../../../docs/reference/bundled-presets.md)
+- [Runtime Assembly](../../../docs/tutorials/runtime-assembly.md)
 
 ## Simulation Config
-Defines the core simulation parameters.
 
-| Field                         | Type        | Description                                                                         |
-|-------------------------------|-------------|-------------------------------------------------------------------------------------|
-| `StepInterval`                | `int`       | Time interval (in seconds) between simulation steps. Use `-1` to indicate autorun.  |
-| `StepMultiplier`              | `int`       | Multiplier for simulation speed (only used in autorun, e.g. set to `2` the simulation runs in double the speed) |
-| `StepCount`                   | `int`       | Total number of steps to simulate (only used in autorun).                           |
-| `SatelliteDataSource`         | `string`    | Path to the satellite data source file.                                             |
-| `SatelliteDataSourceType`     | `string`    | Type of satellite data source (currently only `tle` supported).                     |
-| `GroundStationDataSource`     | `string`    | Path to the ground station data source file.                                        |
-| `GroundStationDataSourceType` | `string`    | Type of ground station data source (currently `yml` and `json` supported).          |
-| `SimulationStartTime`         | `time.Time` | Start time of the simulation (ISO 8601 format).                                     |
+Defined in `go/configs/config.go`.
 
-**Example for autorun:** (`simulationAutorunConfig.yaml`)
+| Field | Type | Meaning |
+|------|------|---------|
+| `StepInterval` | `int` | Real-time delay between autorun steps in milliseconds. `< 0` selects the current manual CLI path. |
+| `StepMultiplier` | `int` | Simulated seconds added per autorun step. |
+| `StepCount` | `int` | Number of steps to run. |
+| `LogLevel` | `string` | `error`, `warn`, `info`, or `debug`. |
+| `SatelliteDataSource` | `string` | Satellite file name or path. |
+| `SatelliteDataSourceType` | `string` | Currently `tle`. |
+| `GroundStationDataSource` | `string` | Ground-station file name or path. |
+| `GroundStationDataSourceType` | `string` | The main runtime currently wires `yml`. |
+| `UsePreRouteCalc` | `bool` | Whether routers should precompute routing tables each step. |
+| `SimulationStartTime` | `time.Time` | Absolute UTC start time used for TLE propagation. |
+
+Example:
+
 ```yaml
 StepInterval: 1
 StepMultiplier: 10
 StepCount: 10
-SatelliteDataSource: starlink_newest.tle
+LogLevel: info
+SatelliteDataSource: starlink_500.tle
 SatelliteDataSourceType: tle
 GroundStationDataSource: ground_stations.yml
 GroundStationDataSourceType: yml
-SimulationStartTime: "2025-10-01T00:00:00Z"
-```
-
-**Example for manual:** (`simulationManualConfig.yaml`)
-```yaml
-StepInterval: -1
-SatelliteDataSource: starlink_newest.tle
-SatelliteDataSourceType: tle
-GroundStationDataSource: ground_stations.yml
-GroundStationDataSourceType: yml
-SimulationStartTime: "2025-10-01T00:00:00Z"
+UsePreRouteCalc: false
+SimulationStartTime: "2026-03-26T14:00:00Z"
 ```
 
 ## Inter-Satellite Link Config
-Configures the inter-satellite communication link selection algorithm
 
-| Field                     | Type      | Description                                                                             |
-|---------------------------|-----------|-----------------------------------------------------------------------------------------|
-| `Protocol`                | `string`  | Name of the link selection protocol (e.g., `mst`, `nearest`)                            |
-| `Neighbours`              | `int`     | Numbers of links a satellite should establish (might gets ignored by some protocols).   |
+| Field | Type | Meaning |
+|------|------|---------|
+| `Neighbours` | `int` | Neighbor target for protocols that use it. |
+| `Protocol` | `string` | ISL protocol name. |
 
-**Example:** (`islMstConfig.yaml`)
-```yaml
-Neighbours: 4
-Protocol: mst
-```
+Supported protocol names are documented in [Configuration Reference](../../../docs/reference/configuration.md).
 
 ## Ground Link Config
-Configures communication links between ground stations and satellites
 
-| Field                     | Type      | Description                                                                             |
-|---------------------------|-----------|-----------------------------------------------------------------------------------------|
-| `Protocol`                | `string`  | Name of the link selection protocol (currently only `nearest` supported)                |
+| Field | Type | Meaning |
+|------|------|---------|
+| `Protocol` | `string` | Ground-to-satellite protocol name. |
 
-
-**Example:** (`groundLinkNearestConfig.yaml`)
-```yaml
-Protocol: nearest
-```
+The current bundled and supported value is `nearest`.
 
 ## Router Config
-Defines the routing strategy for the simulation
 
-| Field                     | Type      | Description                                                               |
-|---------------------------|-----------|---------------------------------------------------------------------------|
-| `Protocol`                | `string`  | Name of the routing protocol (e.g., `a-star`, `dijkstra`)                 |
+| Field | Type | Meaning |
+|------|------|---------|
+| `Protocol` | `string` | Router protocol name. |
 
+The current bundled values are `a-star` and `dijkstra`.
 
-**Example:** (`routerAStarConfig.yaml`)
-```yaml
-Protocol: a-star
-```
+## Computing Config
 
-## Computing  Config
-Specifies computing resources for satellites or ground stations per computing type
+This file is a list of computing profiles.
 
+| Field | Type | Meaning |
+|------|------|---------|
+| `Cores` | `int` | CPU capacity. |
+| `Memory` | `int` | Memory capacity. |
+| `Type` | `string` | `None`, `Edge`, `Cloud`, or `Any`. |
 
+Example:
 
-| Field                     | Type      | Description                                                   |
-|---------------------------|-----------|---------------------------------------------------------------|
-| `Cores`                   | `int`     | Number of CPU cores.                                          |
-| `Memory`                  | `int`     | Memory capacity (in MB).                                      |
-| `Type`                    | `string`  | Type of computing resource (`None`, `Edge` or `Cloud`).               |
-
-**Example:** (`computingConfig.yaml`)
 ```yaml
 - Cores: 0
   Memory: 0
@@ -102,7 +91,22 @@ Specifies computing resources for satellites or ground stations per computing ty
   Type: Cloud
 ```
 
-## File Formats
+## Ground-Station YAML Fields
 
-Configuration files can be in YAML (.yaml or .yml) or JSON (.json) format.
-Use the appropriate file extension for your chosen format.
+The bundled ground-station file lives in `../yml/ground_stations.yml`.
+
+Supported fields:
+
+| Field | Type | Meaning |
+|------|------|---------|
+| `Name` | `string` | Ground-station name. |
+| `Lat` | `float64` | Latitude in degrees. |
+| `Lon` | `float64` | Longitude in degrees. |
+| `Alt` | `float64` | Optional altitude in meters. |
+| `Protocol` | `string` | Optional per-station ground-link override. |
+| `ComputingType` | `string` | Optional per-station computing override. |
+
+Note:
+
+- some bundled entries still contain a legacy `Router` field
+- the current loader ignores it

@@ -1,8 +1,8 @@
 package computing
 
 import (
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ ComputingBuilder = (*DefaultComputingBuilder)(nil)
@@ -42,6 +42,20 @@ func (b *DefaultComputingBuilder) WithComputingType(computingType types.Computin
 		}
 	}
 	return b
+}
+
+// BuildWithType creates a computing instance for the requested type without
+// mutating the builder's current selection.
+func (b *DefaultComputingBuilder) BuildWithType(computingType types.ComputingType) *Computing {
+	selected := b.currentConfiguration
+	for _, config := range b.computingConfiguration {
+		if config.Type == computingType {
+			selected = config
+			break
+		}
+	}
+
+	return NewComputing(float64(selected.Cores), float64(selected.Memory), selected.Type)
 }
 
 // Build returns the configured Computing instance.

@@ -6,8 +6,8 @@ import (
 	"math"
 	"sort"
 
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // AStarRouter implements the A* pathfinding algorithm between nodes.

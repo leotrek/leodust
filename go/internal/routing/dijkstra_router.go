@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // DijkstraRouter implements shortest-path routing using Dijkstra's algorithm
@@ -101,9 +101,10 @@ func (r *DijkstraRouter) CalculateRoutingTable() error {
 	queue := []dijkstraEntry{}
 	r.routes[r.node] = routeEntry{}
 
-	// Initialize priority queue with links
+	// Seed the queue with one-hop routes from the mounted node. Each queue entry
+	// keeps the original first hop in Via so completed routes can be emitted as
+	// forwarding-table entries instead of full hop-by-hop paths.
 	for _, l := range r.node.GetLinkNodeProtocol().Established() {
-		// Only add established ISL links
 		queue = append(queue, dijkstraEntry{
 			Link:    l,
 			Target:  l.GetOther(r.node),
@@ -118,18 +119,17 @@ func (r *DijkstraRouter) CalculateRoutingTable() error {
 	// Initialize visited map
 	visited := map[types.Node]bool{r.node: true}
 
-	// Process the queue
+	// Pop the current shortest candidate, fix it into the routing table, then
+	// expand the destination's neighbors with accumulated latency.
 	for len(queue) > 0 {
-		// Get the entry with the least latency
 		entry := queue[0]
-		queue = queue[1:] // Pop the first entry from the queue
+		queue = queue[1:]
 
 		// Skip already visited targets
 		if visited[entry.Target] {
 			continue
 		}
 
-		// Mark the target as visited and add it to the routes
 		visited[entry.Target] = true
 		r.routes[entry.Target] = routeEntry{
 			OutLink: entry.Via,
@@ -139,9 +139,9 @@ func (r *DijkstraRouter) CalculateRoutingTable() error {
 		// Handle services for the target node
 		r.addServicesToRoutes(entry.Target, entry.Latency)
 
-		// Add the neighbors to the queue
+		// Preserve the original Via link when exploring deeper so every discovered
+		// route still resolves to the correct first hop from the mounted node.
 		for _, link := range entry.Target.GetLinkNodeProtocol().Established() {
-			// Add the neighboring ISL link to the queue
 			neighbor := link.GetOther(entry.Target)
 			if !visited[neighbor] {
 				queue = append(queue, dijkstraEntry{
@@ -176,22 +176,19 @@ func (r *DijkstraRouter) ReceiveServiceAdvertismentsAsync(serviceName string, ou
 
 // addServicesToRoutes helps manage the services associated with a node in the routes map.
 func (r *DijkstraRouter) addServicesToRoutes(target types.Node, latency float64) {
-	// Loop through all services hosted on the target node
 	for _, service := range target.GetComputing().GetServices() {
-		// Check if the service already exists in the routing table
 		if _, exists := r.services[service.GetServiceName()]; !exists {
-			// Handle the case where there are no links available
 			if len(target.GetLinkNodeProtocol().Links()) > 0 {
-				// Use the first available link as the "via" link for simplicity
+				// Services inherit the same latency as the node route. The outlink is
+				// only used as a first-hop hint, so the first known link is sufficient.
 				r.services[service.GetServiceName()] = routeEntry{
-					OutLink: target.GetLinkNodeProtocol().Links()[0], // Using the first link as the "via"
-					Route:   NewPreRouteResult(int(latency)),         // Creating PreRouteResult with latency
+					OutLink: target.GetLinkNodeProtocol().Links()[0],
+					Route:   NewPreRouteResult(int(latency)),
 				}
 			} else {
-				// If no links are available, we can set the route to unreachable or handle it differently
 				r.services[service.GetServiceName()] = routeEntry{
-					OutLink: nil,                            // No valid link
-					Route:   UnreachableRouteResultInstance, // Set to unreachable
+					OutLink: nil,
+					Route:   UnreachableRouteResultInstance,
 				}
 			}
 		}

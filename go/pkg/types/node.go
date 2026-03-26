@@ -26,3 +26,12 @@ type Node interface {
 	// GetLinkNodeProtocol returns the link protocol instance associated with the node
 	GetLinkNodeProtocol() LinkNodeProtocol
 }
+
+// AsNodes converts any slice of node-compatible values into a generic node slice.
+func AsNodes[T Node](items []T) []Node {
+	nodes := make([]Node, len(items))
+	for i, item := range items {
+		nodes[i] = item
+	}
+	return nodes
+}

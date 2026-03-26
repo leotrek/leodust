@@ -1,12 +1,12 @@
 package simulation
 
 import (
-	"log"
 	"sync"
 	"time"
 
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/pkg/logging"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.SimulationController = (*SimulationIteratorService)(nil)
@@ -55,7 +55,7 @@ func (s *SimulationIteratorService) runSimulationStep(nextTime func(time.Time) t
 
 	s.currentIx++
 	s.setSimulationTime(s.simulationStates[s.currentIx].Time)
-	log.Printf("Simulation time is %s", s.simTime.Format(time.RFC3339))
+	logging.Infof("Simulation time is %s", s.simTime.Format(time.RFC3339))
 
 	// Update positions of all nodes (satellites and ground stations)
 	var wg sync.WaitGroup
@@ -92,7 +92,7 @@ func (s *SimulationIteratorService) runSimulationStep(nextTime func(time.Time) t
 
 	// Check if the orchestrator needs to reschedule
 	if s.orchestrator != nil {
-		log.Println("Checking orchestrator for reschedule...")
+		logging.Debugf("Checking orchestrator for reschedule")
 		// s.orchestrator.CheckReschedule()
 	}
 
@@ -104,7 +104,7 @@ func (s *SimulationIteratorService) runSimulationStep(nextTime func(time.Time) t
 	// Execute post-step simulation plugins
 	for _, plugin := range s.simPlugins {
 		if err := plugin.PostSimulationStep(s); err != nil {
-			log.Printf("Plugin %s PostSimulationStep error: %v", plugin.Name(), err)
+			logging.Warnf("Plugin %s PostSimulationStep error: %v", plugin.Name(), err)
 		}
 	}
 

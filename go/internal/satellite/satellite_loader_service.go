@@ -1,41 +1,28 @@
 package satellite
 
 import (
-	"log"
-
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/logging"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // SatelliteLoaderService wires the constellation loader and triggers simulation startup.
 type SatelliteLoaderService struct {
 	controller            types.SimulationController
 	constellationLoader   *SatelliteConstellationLoader
-	tleLoader             *TleLoader
-	satelliteBuilder      *SatelliteBuilder
-	config                configs.InterSatelliteLinkConfig
 	satelliteDataSource   string
 	satelliteSourceFormat string
 }
 
-// NewSatelliteLoaderService initializes all required loaders and binds them.
+// NewSatelliteLoaderService wires a configured constellation loader to the simulation controller.
 func NewSatelliteLoaderService(
-	config configs.InterSatelliteLinkConfig,
-	builder *SatelliteBuilder,
 	loader *SatelliteConstellationLoader,
 	controller types.SimulationController,
 	dataSourcePath string,
 	sourceFormat string,
 ) *SatelliteLoaderService {
-	tleLoader := NewTleLoader(config, builder)
-	loader.RegisterDataSourceLoader("tle", tleLoader)
-
 	return &SatelliteLoaderService{
 		controller:            controller,
 		constellationLoader:   loader,
-		tleLoader:             tleLoader,
-		satelliteBuilder:      builder,
-		config:                config,
 		satelliteDataSource:   dataSourcePath,
 		satelliteSourceFormat: sourceFormat,
 	}
@@ -43,19 +30,10 @@ func NewSatelliteLoaderService(
 
 // Start loads satellites and injects them into the simulation
 func (s *SatelliteLoaderService) Start() error {
-	log.Println("Starting LoaderService...")
+	logging.Infof("Starting satellite loader service")
 	satellites, err := s.constellationLoader.LoadSatelliteConstellation(s.satelliteDataSource, s.satelliteSourceFormat)
 	if err != nil {
 		return err
 	}
-
-	// Convert []*node.Satellite to []*types.Node
-	var nodes []types.Node
-	for _, satellite := range satellites {
-		// Append the pointer to the slice
-		node := types.Node(satellite) // Convert *node.Satellite to *types.Node
-		nodes = append(nodes, node)   // Append pointer to slice
-	}
-
-	return s.controller.InjectSatellites(nodes)
+	return s.controller.InjectSatellites(types.AsNodes(satellites))
 }

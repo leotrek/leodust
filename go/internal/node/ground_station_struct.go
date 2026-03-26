@@ -1,12 +1,10 @@
 package node
 
 import (
-	"errors"
-	"math"
-	"sync"
 	"time"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/internal/orbit"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.GroundStation = (*GroundStationStruct)(nil)
@@ -18,14 +16,12 @@ type GroundStationStruct struct {
 
 	Latitude                    float64
 	Longitude                   float64
-	SimulationStartTime         time.Time
+	Altitude                    float64
 	GroundSatelliteLinkProtocol types.GroundSatelliteLinkProtocol
-
-	mu sync.Mutex
 }
 
 // NewGroundStation creates and initializes a new ground station with link protocol and position
-func NewGroundStation(name string, lat float64, lon float64, protocol types.GroundSatelliteLinkProtocol, simStart time.Time, router types.Router, computing types.Computing) *GroundStationStruct {
+func NewGroundStation(name string, lat float64, lon float64, altitude float64, protocol types.GroundSatelliteLinkProtocol, router types.Router, computing types.Computing) *GroundStationStruct {
 	gs := &GroundStationStruct{
 		BaseNode: BaseNode{
 			Name:      name,
@@ -34,68 +30,21 @@ func NewGroundStation(name string, lat float64, lon float64, protocol types.Grou
 		},
 		Latitude:                    lat,
 		Longitude:                   lon,
-		SimulationStartTime:         simStart,
+		Altitude:                    altitude,
 		GroundSatelliteLinkProtocol: protocol,
 	}
 	protocol.Mount(gs)
 	router.Mount(gs)
-	gs.updatePositionFromElapsed(0)
+	computing.Mount(gs)
+	gs.Position = orbit.GeodeticToECEF(gs.Latitude, gs.Longitude, gs.Altitude)
 	return gs
 }
 
-// UpdatePosition sets the current position of the ground station based on simulation time
-func (gs *GroundStationStruct) UpdatePosition(simTime time.Time) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
-	timeElapsed := simTime.Sub(gs.SimulationStartTime).Seconds()
-	gs.updatePositionFromElapsed(timeElapsed)
-}
-
-// updatePositionFromElapsed calculates Earth-centered coordinates using geodetic formula
-func (gs *GroundStationStruct) updatePositionFromElapsed(timeElapsed float64) {
-	const (
-		a             = 6378137.0       // semi-major axis in meters
-		b             = 6356752.314245  // semi-minor axis in meters
-		e2            = 1 - (b*b)/(a*a) // eccentricity squared
-		rotationSpeed = 7.2921150e-5    // Earth's rotation speed rad/s
-	)
-
-	latRad := types.DegreesToRadians(gs.Latitude)
-	lonRad := types.DegreesToRadians(gs.Longitude)
-	alt := 0.0
-
-	N := a / math.Sqrt(1-e2*math.Sin(latRad)*math.Sin(latRad))
-
-	x := (N + alt) * math.Cos(latRad) * math.Cos(lonRad)
-	y := (N + alt) * math.Cos(latRad) * math.Sin(lonRad)
-	z := ((b * b / (a * a) * N) + alt) * math.Sin(latRad)
-
-	theta := rotationSpeed * timeElapsed
-	xRot := x*math.Cos(theta) - y*math.Sin(theta)
-	yRot := x*math.Sin(theta) + y*math.Cos(theta)
-	zRot := z
-
-	gs.Position = types.Vector{X: xRot, Y: yRot, Z: zRot}
+// UpdatePosition refreshes the fixed ECEF ground-station coordinates.
+func (gs *GroundStationStruct) UpdatePosition(_ time.Time) {
+	gs.Position = orbit.GeodeticToECEF(gs.Latitude, gs.Longitude, gs.Altitude)
 }
 
 func (gs *GroundStationStruct) GetLinkNodeProtocol() types.LinkNodeProtocol {
 	return gs.GroundSatelliteLinkProtocol
-}
-
-// FindNearestSatellite returns the closest satellite in a given list
-func (gs *GroundStationStruct) FindNearestSatellite(sats []types.Satellite) (types.Satellite, error) {
-	if len(sats) == 0 {
-		return nil, errors.New("satellite list is empty")
-	}
-	nearest := sats[0]
-	minDist := gs.DistanceTo(nearest)
-	for _, s := range sats[1:] {
-		dist := gs.DistanceTo(s)
-		if dist < minDist {
-			nearest = s
-			minDist = dist
-		}
-	}
-	return nearest, nil
 }

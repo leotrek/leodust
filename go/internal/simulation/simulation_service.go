@@ -1,14 +1,12 @@
 package simulation
 
 import (
-	"log"
 	"sync"
 	"time"
 
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/internal/computing"
-	"github.com/keniack/stardustGo/internal/routing"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/pkg/logging"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.SimulationController = (*SimulationService)(nil)
@@ -16,9 +14,6 @@ var _ types.SimulationController = (*SimulationService)(nil)
 // SimulationService handles simulation lifecycle and state updates
 type SimulationService struct {
 	BaseSimulationService
-
-	routerBuilder    *routing.RouterBuilder
-	computingBuilder *computing.DefaultComputingBuilder
 
 	simplugins      []types.SimulationPlugin
 	statePluginRepo *types.StatePluginRepository
@@ -30,23 +25,19 @@ type SimulationService struct {
 // NewSimulationService initializes the simulation service
 func NewSimulationService(
 	config *configs.SimulationConfig,
-	router *routing.RouterBuilder,
-	computing *computing.DefaultComputingBuilder,
 	simplugins []types.SimulationPlugin,
 	statePluginRepo *types.StatePluginRepository,
-	simualtionStateOutputFile *string,
+	simulationStateOutputFile *string,
 ) *SimulationService {
 	simService := &SimulationService{
-		routerBuilder:    router,
-		computingBuilder: computing,
-		simplugins:       simplugins,
-		statePluginRepo:  statePluginRepo,
+		simplugins:      simplugins,
+		statePluginRepo: statePluginRepo,
 	}
 	simService.BaseSimulationService = NewBaseSimulationService(config, simService.runSimulationStep)
 
-	if *simualtionStateOutputFile != "" {
-		simService.simulationStateSerializer = NewSimulationStateSerializer(*simualtionStateOutputFile, statePluginRepo.GetAllPlugins())
-		log.Printf("Simulation state will be serialized to %s", *simualtionStateOutputFile)
+	if *simulationStateOutputFile != "" {
+		simService.simulationStateSerializer = NewSimulationStateSerializer(*simulationStateOutputFile, statePluginRepo.GetAllPlugins())
+		logging.Infof("Simulation state will be serialized to %s", *simulationStateOutputFile)
 	}
 
 	return simService
@@ -76,7 +67,7 @@ func (s *SimulationService) runSimulationStep(nextTime func(time.Time) time.Time
 	s.lock.Unlock()
 
 	s.setSimulationTime(nextTime(s.GetSimulationTime()))
-	log.Printf("Simulation time is %s", s.simTime.Format(time.RFC3339))
+	logging.Infof("Simulation time is %s", s.simTime.Format(time.RFC3339))
 
 	// Update positions of all nodes (satellites and ground stations)
 	var wg sync.WaitGroup
@@ -113,7 +104,7 @@ func (s *SimulationService) runSimulationStep(nextTime func(time.Time) time.Time
 
 	// Check if the orchestrator needs to reschedule
 	if s.orchestrator != nil {
-		log.Println("Checking orchestrator for reschedule...")
+		logging.Debugf("Checking orchestrator for reschedule")
 		// s.orchestrator.CheckReschedule()
 	}
 
@@ -125,7 +116,7 @@ func (s *SimulationService) runSimulationStep(nextTime func(time.Time) time.Time
 	// Execute post-step simulation plugins
 	for _, plugin := range s.simplugins {
 		if err := plugin.PostSimulationStep(s); err != nil {
-			log.Printf("Plugin %s PostSimulationStep error: %v", plugin.Name(), err)
+			logging.Warnf("Plugin %s PostSimulationStep error: %v", plugin.Name(), err)
 		}
 	}
 

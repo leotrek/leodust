@@ -4,9 +4,9 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/internal/links/linktypes"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/internal/links/linktypes"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.InterSatelliteLinkProtocol = (*IslSatelliteCentricMstProtocol)(nil)

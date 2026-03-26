@@ -2,13 +2,13 @@ package simulation
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/internal/deployment"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/internal/deployment"
+	"github.com/leotrek/leodust/pkg/logging"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 type BaseSimulationService struct {
@@ -58,7 +58,7 @@ func (s *BaseSimulationService) InjectSatellites(satellites []types.Node) error 
 		s.all = append(s.all, sat) // Add satellites as generic nodes
 	}
 
-	log.Printf("Injected %d satellites into simulation", len(s.satellites))
+	logging.Infof("Injected %d satellites into simulation", len(s.satellites))
 	return nil
 }
 
@@ -74,7 +74,7 @@ func (s *BaseSimulationService) InjectGroundStations(groundStations []types.Node
 		s.all = append(s.all, gs) // Add ground station as generic nodes
 	}
 
-	log.Printf("Injected %d ground stations into simulation", len(s.groundNodes))
+	logging.Infof("Injected %d ground stations into simulation", len(s.groundNodes))
 	return nil
 }
 
@@ -92,9 +92,10 @@ func (s *BaseSimulationService) StartAutorun() <-chan struct{} {
 
 	done := make(chan struct{})
 	go func() {
-		// While autorun is enabled, run simulation steps at configured intervals
+		// Check the limit before each step so StepCount is interpreted as the exact
+		// number of simulation steps to execute.
 		for {
-			if !s.autorun || s.stepCount > s.maxStepCount {
+			if !s.autorun || s.stepCount >= s.maxStepCount {
 				break
 			}
 

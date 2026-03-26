@@ -1,7 +1,8 @@
 package linktypes
 
 import (
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/internal/orbit"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.Link = (*GroundLink)(nil)
@@ -45,9 +46,9 @@ func (gl *GroundLink) GetOther(self types.Node) types.Node {
 	return nil
 }
 
-// IsReachable returns true – placeholder for future visibility checks.
+// IsReachable returns true when the satellite is above the ground station horizon.
 func (gl *GroundLink) IsReachable() bool {
-	return true
+	return orbit.GroundSatelliteVisible(gl.GroundStation.GetPosition(), gl.Satellite.GetPosition())
 }
 
 func (gl *GroundLink) Nodes() (types.Node, types.Node) {

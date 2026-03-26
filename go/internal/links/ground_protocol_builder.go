@@ -1,8 +1,8 @@
 package links
 
 import (
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 type GroundProtocolBuilder struct {

@@ -5,7 +5,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 var _ types.InterSatelliteLinkProtocol = (*LinkFilterProtocol)(nil)
@@ -78,6 +78,8 @@ func (p *LinkFilterProtocol) UpdateLinks() ([]types.Link, error) {
 		return nil, err
 	}
 
+	// Track the previous outward-facing set so links that disappear from the inner
+	// protocol are removed from the filtered established cache as well.
 	oldOut := p.out
 	p.out = make(map[types.Link]struct{})
 	filtered := make([]types.Link, 0, len(all))

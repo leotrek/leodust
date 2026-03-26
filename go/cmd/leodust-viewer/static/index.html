@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LeoDust Viewer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Snapshot Playback</p>
+          <h1>LeoDust Viewer</h1>
+        </div>
+        <div class="status-block">
+          <div class="status-pill" id="status-pill">Loading snapshot…</div>
+          <div class="time-readout" id="time-readout">Time: --</div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="globe-panel">
+          <canvas id="globe-canvas" aria-label="Simulation globe"></canvas>
+          <div class="canvas-overlay">
+            <div class="legend">
+              <span><i class="dot satellite-dot"></i>Satellite</span>
+              <span><i class="dot ground-dot"></i>Ground</span>
+              <span><i class="dot link-dot"></i>Link</span>
+            </div>
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <section class="card datasets-card">
+            <h2>Precomputed Sets</h2>
+            <label class="slider-label" for="snapshot-select">Dataset</label>
+            <select id="snapshot-select" class="snapshot-select" aria-label="Precomputed dataset"></select>
+            <div id="snapshot-meta" class="snapshot-meta muted-copy">Loading available snapshots…</div>
+          </section>
+
+          <section class="card controls-card">
+            <div class="controls-row">
+              <button id="play-button" class="primary-button" type="button">Play</button>
+              <button id="reset-view-button" class="secondary-button" type="button">Reset View</button>
+            </div>
+
+            <label class="slider-label" for="frame-slider">Timeline</label>
+            <input id="frame-slider" type="range" min="0" max="0" value="0" />
+            <div class="range-meta">
+              <span id="frame-label">Frame 0 / 0</span>
+              <label>
+                Speed
+                <select id="playback-speed">
+                  <option value="0.25">0.25x</option>
+                  <option value="0.5">0.5x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="2">2x</option>
+                  <option value="4">4x</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="slider-label" for="max-satellites">Satellite limit</label>
+            <div class="limit-row">
+              <input id="max-satellites" type="number" min="0" step="1" value="0" inputmode="numeric" />
+              <span id="max-satellites-hint" class="inline-hint">0 = all satellites</span>
+            </div>
+
+            <div class="toggle-grid">
+              <label><input id="show-satellites" type="checkbox" checked /> Show satellites</label>
+              <label><input id="show-grounds" type="checkbox" checked /> Show ground stations</label>
+              <label><input id="show-links" type="checkbox" checked /> Show links</label>
+              <label><input id="show-hidden" type="checkbox" /> Show far side</label>
+              <label><input id="show-labels" type="checkbox" /> Show labels</label>
+              <label><input id="auto-rotate" type="checkbox" checked /> Auto rotate</label>
+            </div>
+          </section>
+
+          <section class="card stats-card">
+            <h2>Snapshot</h2>
+            <dl class="stats-grid">
+              <div>
+                <dt>Frames</dt>
+                <dd id="frame-count">--</dd>
+              </div>
+              <div>
+                <dt>Satellites</dt>
+                <dd id="satellite-count">--</dd>
+              </div>
+              <div>
+                <dt>Grounds</dt>
+                <dd id="ground-count">--</dd>
+              </div>
+              <div>
+                <dt>Links</dt>
+                <dd id="link-count">--</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="card details-card">
+            <h2>Selection</h2>
+            <div id="selection-empty" class="muted-copy">Click a visible node to inspect its current state.</div>
+            <dl id="selection-details" class="details-grid hidden">
+              <div>
+                <dt>Name</dt>
+                <dd id="selection-name"></dd>
+              </div>
+              <div>
+                <dt>Type</dt>
+                <dd id="selection-type"></dd>
+              </div>
+              <div>
+                <dt>Altitude</dt>
+                <dd id="selection-altitude"></dd>
+              </div>
+              <div>
+                <dt>Active Links</dt>
+                <dd id="selection-links"></dd>
+              </div>
+              <div>
+                <dt>Position</dt>
+                <dd id="selection-position"></dd>
+              </div>
+            </dl>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

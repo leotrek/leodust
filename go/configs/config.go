@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -15,6 +15,7 @@ type SimulationConfig struct {
 	StepInterval                int       `json:"StepInterval" yaml:"StepInterval"`
 	StepMultiplier              int       `json:"StepMultiplier" yaml:"StepMultiplier"`
 	StepCount                   int       `json:"StepCount" yaml:"StepCount"`
+	LogLevel                    string    `json:"LogLevel" yaml:"LogLevel"`
 	SatelliteDataSource         string    `json:"SatelliteDataSource" yaml:"SatelliteDataSource"`
 	SatelliteDataSourceType     string    `json:"SatelliteDataSourceType" yaml:"SatelliteDataSourceType"`
 	GroundStationDataSource     string    `json:"GroundStationDataSource" yaml:"GroundStationDataSource"`
@@ -54,6 +55,8 @@ func LoadConfigFromFile[T any](path string) (*T, error) {
 	ext := filepath.Ext(path)
 	switch ext {
 	case ".yaml", ".yml":
+		// YAML is the default format for simulator configs, so keep this branch
+		// explicit rather than relying on a generic decoder.
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
 			return nil, err
 		}

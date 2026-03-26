@@ -49,13 +49,33 @@ func (r *StatePluginRepository) GetAllPlugins() []StatePlugin {
 	return plugins
 }
 
-// GetStatePlugin is a generic function that retrieves a plugin of type T from the repository.
-// It panics if the plugin is not found or if the type assertion fails.
-func GetStatePlugin[T StatePlugin](r *StatePluginRepository) T {
+// FindStatePlugin returns the registered plugin for T when present.
+// It is the non-panicking lookup path for optional state plugins.
+func FindStatePlugin[T StatePlugin](r *StatePluginRepository) (T, bool) {
+	var zero T
+	if r == nil {
+		return zero, false
+	}
+
 	typ := reflect.TypeOf(*new(T))
 	plugin, ok := r.plugins[typ]
 	if !ok {
+		return zero, false
+	}
+
+	cast, ok := plugin.(T)
+	if !ok {
+		return zero, false
+	}
+	return cast, true
+}
+
+// GetStatePlugin is a generic function that retrieves a plugin of type T from the repository.
+// It panics if the plugin is not found or if the type assertion fails.
+func GetStatePlugin[T StatePlugin](r *StatePluginRepository) T {
+	plugin, ok := FindStatePlugin[T](r)
+	if !ok {
 		panic("plugin not found")
 	}
-	return plugin.(T)
+	return plugin
 }

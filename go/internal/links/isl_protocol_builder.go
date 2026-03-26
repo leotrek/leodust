@@ -1,10 +1,9 @@
 package links
 
 import (
-	"log"
-
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/pkg/logging"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // IslProtocolBuilder constructs inter-satellite link protocols based on config
@@ -49,7 +48,7 @@ func (b *IslProtocolBuilder) Build() types.InterSatelliteLinkProtocol {
 	case "nearest":
 		return NewIslNearestProtocol(b.config)
 	default:
-		log.Printf("[WARN] Unknown ISL protocol '%s', falling back to 'nearest'", b.config.Protocol)
+		logging.Warnf("Unknown ISL protocol %q, falling back to nearest", b.config.Protocol)
 		return NewIslNearestProtocol(b.config)
 	}
 }

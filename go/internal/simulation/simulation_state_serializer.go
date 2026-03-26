@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // SimulationStateSerializer is responsible for serializing the state of a simulation.

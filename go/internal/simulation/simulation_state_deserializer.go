@@ -6,14 +6,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/keniack/stardustGo/configs"
-	"github.com/keniack/stardustGo/internal/computing"
-	"github.com/keniack/stardustGo/internal/deployment"
-	"github.com/keniack/stardustGo/internal/links"
-	"github.com/keniack/stardustGo/internal/links/linktypes"
-	"github.com/keniack/stardustGo/internal/node"
-	"github.com/keniack/stardustGo/internal/routing"
-	"github.com/keniack/stardustGo/pkg/types"
+	"github.com/leotrek/leodust/configs"
+	"github.com/leotrek/leodust/internal/computing"
+	"github.com/leotrek/leodust/internal/deployment"
+	"github.com/leotrek/leodust/internal/links"
+	"github.com/leotrek/leodust/internal/links/linktypes"
+	"github.com/leotrek/leodust/internal/node"
+	"github.com/leotrek/leodust/internal/routing"
+	"github.com/leotrek/leodust/pkg/types"
 )
 
 // SimulationStateDeserializer is responsible for deserializing simulation state data.

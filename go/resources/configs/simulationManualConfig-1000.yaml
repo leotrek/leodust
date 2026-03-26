@@ -1,8 +1,9 @@
 StepInterval: -1
 StepMultiplier: 10
 StepCount: 10
+LogLevel: info
 SatelliteDataSource: starlink_1000.tle
 SatelliteDataSourceType: tle
 GroundStationDataSource: ground_stations.yml
 GroundStationDataSourceType: yml
-SimulationStartTime: "2025-10-01T00:00:00Z"
+SimulationStartTime: "2026-03-26T14:00:00Z"

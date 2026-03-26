@@ -1,6 +1,6 @@
 # Simulation Results
 
-This directory contains the results of various simulations run using the Stardust simulator. The results are organized to provide insights into the performance and behavior of the simulations.
+This directory contains the results of various simulations run using the LeoDust simulator. The results are organized to provide insights into the performance and behavior of the simulations.
 
 ## Overview of Results
 Simulation results are stored in different formats to facilitate analysis and visualization. These include:
@@ -16,7 +16,7 @@ Simulation results are stored in different formats to facilitate analysis and vi
    - Use log files to identify some key moments in the simulation.
 
 2. **Replay Simulations**:
-   - Use binary files to replay simulations and observe system behavior ([click here to see how to run in precomputed mode](../README.md#-running-the-stardustgo-simulator)).
+   - Use binary files to replay simulations and observe system behavior (see the quick start and detailed guide in [README.md](../README.md) and [SIMULATOR_GUIDE.md](../SIMULATOR_GUIDE.md)).
 
 For example, when we compare mst for newest constellation in [simulated](./mst/simulated/newest.csv) and [precomputed](./mst/precomputed/newest.csv) mode, we can see that the simulation was 2 minutes for simulation mode but only 10 seconds in precomputed mode. 
 In simulated mode we can see the link selection process is expensive and single threaded for mst, since most of the time all cores except one are ideling.
