@@ -2,6 +2,24 @@
   "SelectedID": "precomputed_data-0250",
   "Snapshots": [
     {
+      "ID": "precomputed_data-010",
+      "Name": "precomputed_data-010",
+      "Filename": "precomputed_data-10.gob.json",
+      "Path": "./snapshots/precomputed_data-10.gob.json",
+      "SatelliteCount": 10,
+      "GroundCount": 85,
+      "FrameCount": 10
+    },
+    {
+      "ID": "precomputed_data-050",
+      "Name": "precomputed_data-050",
+      "Filename": "precomputed_data-050.gob.json",
+      "Path": "./snapshots/precomputed_data-050.gob.json",
+      "SatelliteCount": 50,
+      "GroundCount": 85,
+      "FrameCount": 10
+    },
+    {
       "ID": "precomputed_data-0250",
       "Name": "precomputed_data-0250",
       "Filename": "precomputed_data-0250.gob.json",
