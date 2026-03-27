@@ -180,6 +180,7 @@ LeoDust has two plugin families.
 Built by `internal/simplugin/SimPluginBuilder`.
 
 They run after each simulation step and are intended for scenario logic.
+See [Plugin Reference](../reference/plugins.md) for registration and authoring details.
 
 ### State plugins
 
@@ -189,6 +190,7 @@ They:
 
 - compute additional state after each step
 - can serialize that extra state for replay
+See [Plugin Reference](../reference/plugins.md) for the live vs replay implementation pattern.
 
 At runtime they are stored in `types.StatePluginRepository`.
 

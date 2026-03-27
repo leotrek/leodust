@@ -4,6 +4,8 @@ This is the detailed reference for the LeoDust simulator.
 
 Use [README.md](./README.md) for the shortest possible quick start. For the maintained Read the Docs and MkDocs content, start at [docs/index.md](./docs/index.md). Use this guide when you want a single-file overview of runtime modes, CLI flags, config properties, data files, outputs, and current behavior.
 
+For the plugin system specifically, see [docs/reference/plugins.md](./docs/reference/plugins.md).
+
 ## Overview
 
 LeoDust simulates a space-ground network made of:
@@ -219,7 +221,7 @@ The main simulator CLI lives in `go/cmd/leodust/main.go`.
 | `--downloadTLEGroup` | CelesTrak group for `--downloadTLEToday` |
 | `--downloadTLEOutput` | Optional output path for the downloaded TLE file |
 
-### Supported Plugin Names
+### Built-in Plugin Names
 
 Simulation plugins:
 
@@ -229,7 +231,7 @@ State plugins:
 
 - `DummySunStatePlugin`
 
-If a state plugin is active during serialization, its data can be reloaded in replay mode through the corresponding precomputed plugin builder.
+For the full plugin model, creation workflow, and replay behavior, see [docs/reference/plugins.md](./docs/reference/plugins.md).
 
 ## `leodust-viewer` CLI Reference
 

@@ -25,6 +25,7 @@ nav:
       - Orbit, Links, and Routing: concepts/orbit-links-routing.md
   - Reference:
       - CLI: reference/cli.md
+      - Plugins: reference/plugins.md
       - Configuration: reference/configuration.md
       - Bundled Presets: reference/bundled-presets.md
       - Data Files: reference/data-files.md

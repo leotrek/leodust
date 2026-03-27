@@ -64,6 +64,8 @@ Replay from a precomputed state:
 
 ### Supported Plugin Names
 
+For the full plugin model and authoring workflow, see [Plugin Reference](plugins.md).
+
 Simulation plugins:
 
 - `DummyPlugin`

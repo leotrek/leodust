@@ -33,6 +33,12 @@ Important functions:
 - `startSimulationIteration`
 - `runController`
 
+Plugin-specific wiring:
+
+- `parseListFlag`
+- `mustBuildSimulationPlugins`
+- `mustBuildStatePlugins`
+
 ### `go/cmd/leodust-viewer`
 
 Role:
@@ -47,6 +53,66 @@ Creates:
 - static viewer bundle
 
 ## Configuration Types
+
+## Plugin Construction Types
+
+For the plugin workflow itself, see [Plugin Reference](plugins.md).
+
+### `types.SimulationPlugin`
+
+Purpose:
+
+- run post-step logic after the core simulation update
+- export or react to live runtime state
+
+Important method:
+
+- `PostSimulationStep`
+
+### `types.StatePlugin`
+
+Purpose:
+
+- compute derived step state
+- save and reload that state for replay
+
+Important methods:
+
+- `PostSimulationStep`
+- `AddState`
+- `Save`
+
+### `simplugin.SimPluginBuilder`
+
+Purpose:
+
+- map CLI plugin names to concrete simulation plugin instances
+- hold plugin-specific constructor inputs such as topology export paths
+
+Important methods:
+
+- `WithTopologyOutputFile`
+- `BuildPlugins`
+
+### `stateplugin.DefaultStatePluginBuilder`
+
+Purpose:
+
+- build the live state plugin instances used during normal simulation
+
+Important method:
+
+- `BuildPlugins`
+
+### `stateplugin.DefaultStatePluginPrecompBuilder`
+
+Purpose:
+
+- build replay-side state plugin instances when a `.gob` snapshot is loaded
+
+Important method:
+
+- `BuildPlugins`
 
 ### `configs.SimulationConfig`
 
