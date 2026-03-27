@@ -67,6 +67,16 @@ func main() {
 		"",
 		"Plugin names (optional, comma-separated list)",
 	)
+	topologyOutputFile := flag.String(
+		"topologyOutputFile",
+		"",
+		"Path to continuously export live topology snapshots when TopologyExportPlugin is enabled",
+	)
+	runtimeOutputFile := flag.String(
+		"runtimeOutputFile",
+		"",
+		"Path to continuously export runtime reconciliation snapshots when RuntimeReconcilePlugin is enabled",
+	)
 	logLevelFlag := flag.String(
 		"logLevel",
 		"",
@@ -152,15 +162,15 @@ func main() {
 
 	var simService types.SimulationController
 	if *simulationStateInputFile != "" {
-		simService = startSimulationIteration(*simulationConfig, *computingConfig, *routerConfig, *simulationStateInputFile, simulationPluginList)
+		simService = startSimulationIteration(*simulationConfig, *computingConfig, *routerConfig, *simulationStateInputFile, simulationPluginList, *topologyOutputFile, *runtimeOutputFile)
 	} else {
-		simService = startSimulation(*simulationConfig, *islConfigString, *groundLinkConfigString, *computingConfig, *routerConfig, simulationStateOutputFile, simulationPluginList, statePluginList)
+		simService = startSimulation(*simulationConfig, *islConfigString, *groundLinkConfigString, *computingConfig, *routerConfig, simulationStateOutputFile, simulationPluginList, statePluginList, *topologyOutputFile, *runtimeOutputFile)
 	}
 
 	runController(simService, *simulationConfig)
 }
 
-func startSimulationIteration(simulationConfig configs.SimulationConfig, computingConfig []configs.ComputingConfig, routerConfig configs.RouterConfig, simulationStateInputFile string, simulationPluginList []string) types.SimulationController {
+func startSimulationIteration(simulationConfig configs.SimulationConfig, computingConfig []configs.ComputingConfig, routerConfig configs.RouterConfig, simulationStateInputFile string, simulationPluginList []string, topologyOutputFile string, runtimeOutputFile string) types.SimulationController {
 	// Step 2: Build computing builder with configured strategies
 	var computingBuilder computing.ComputingBuilder = computing.NewComputingBuilder(computingConfig)
 
@@ -168,7 +178,7 @@ func startSimulationIteration(simulationConfig configs.SimulationConfig, computi
 	routerBuilder := routing.NewRouterBuilder(routerConfig)
 
 	// Step 4.1: Initialize plugin builder
-	simPlugins := mustBuildSimulationPlugins(simulationPluginList)
+	simPlugins := mustBuildSimulationPlugins(simulationPluginList, topologyOutputFile, runtimeOutputFile)
 
 	// Step 5: State Plugin Builder
 	statePluginBuilder := stateplugin.NewStatePluginPrecompBuilder(simulationStateInputFile)
@@ -180,7 +190,7 @@ func startSimulationIteration(simulationConfig configs.SimulationConfig, computi
 	return simStateDeserializer.LoadIterator()
 }
 
-func startSimulation(simulationConfig configs.SimulationConfig, islConfigString string, groundLinkConfigString string, computingConfig []configs.ComputingConfig, routerConfig configs.RouterConfig, simulationStateOutputFile *string, simulationPluginList []string, statePluginList []string) types.SimulationController {
+func startSimulation(simulationConfig configs.SimulationConfig, islConfigString string, groundLinkConfigString string, computingConfig []configs.ComputingConfig, routerConfig configs.RouterConfig, simulationStateOutputFile *string, simulationPluginList []string, statePluginList []string, topologyOutputFile string, runtimeOutputFile string) types.SimulationController {
 	islConfig := mustLoadConfig[configs.InterSatelliteLinkConfig](islConfigString, "ISL configuration")
 	groundLinkConfig := mustLoadConfig[configs.GroundLinkConfig](groundLinkConfigString, "ground-link configuration")
 	satelliteDataSourcePath := resolveDataSourcePath(simulationConfig.SatelliteDataSourceType, simulationConfig.SatelliteDataSource)
@@ -193,7 +203,7 @@ func startSimulation(simulationConfig configs.SimulationConfig, islConfigString 
 	routerBuilder := routing.NewRouterBuilder(routerConfig)
 
 	// Step 4.1: Initialize plugin builder
-	simPlugins := mustBuildSimulationPlugins(simulationPluginList)
+	simPlugins := mustBuildSimulationPlugins(simulationPluginList, topologyOutputFile, runtimeOutputFile)
 
 	// Step 4.2: Initialize state plugin builder
 	statePlugins := mustBuildStatePlugins(statePluginList)
@@ -369,8 +379,10 @@ func parseListFlag(value string) []string {
 	return values
 }
 
-func mustBuildSimulationPlugins(pluginNames []string) []types.SimulationPlugin {
-	builder := simplugin.NewPluginBuilder()
+func mustBuildSimulationPlugins(pluginNames []string, topologyOutputFile string, runtimeOutputFile string) []types.SimulationPlugin {
+	builder := simplugin.NewPluginBuilder().
+		WithTopologyOutputFile(topologyOutputFile).
+		WithRuntimeOutputFile(runtimeOutputFile)
 	plugins, err := builder.BuildPlugins(pluginNames)
 	if err != nil {
 		logging.Fatalf("Failed to build simulation plugins: %v", err)

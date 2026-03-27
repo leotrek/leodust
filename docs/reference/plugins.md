@@ -69,6 +69,7 @@ If you were looking for “pre-processing” vs “post-processing”, the close
 ### Simulation plugins
 
 - `DummyPlugin`
+- `RuntimeReconcilePlugin`
 
 ### State plugins
 
@@ -92,6 +93,21 @@ Simulation plugins are enabled with `--simulationPlugins`:
   --routerConfig ./resources/configs/routerAStarConfig.yaml \
   --simulationPlugins DummyPlugin
 ```
+
+`RuntimeReconcilePlugin` is the built-in simulation plugin used for runtime execution integration. It writes a per-step runtime plan for the standalone runtime controller:
+
+```bash
+./leodust \
+  --simulationConfig ./resources/configs/simulationAutorunConfig.yaml \
+  --islConfig ./resources/configs/islMstConfig.yaml \
+  --groundLinkConfig ./resources/configs/groundLinkNearestConfig.yaml \
+  --computingConfig ./resources/configs/computingConfig.yaml \
+  --routerConfig ./resources/configs/routerAStarConfig.yaml \
+  --simulationPlugins RuntimeReconcilePlugin \
+  --runtimeOutputFile ./results/runtime/live_runtime_plan.json
+```
+
+For the controller side, see [Runtime Integration](runtime-integration.md).
 
 State plugins are enabled with `--statePlugins`:
 
@@ -181,6 +197,11 @@ If your plugin needs constructor parameters:
 2. add fluent setters such as `WithMyOutputFile(...)`
 3. plumb the value from `go/cmd/leodust/main.go`
 4. construct the plugin from those builder fields
+
+Example:
+
+- `RuntimeReconcilePlugin` uses `WithRuntimeOutputFile(...)`
+- `go/cmd/leodust/main.go` wires that from `--runtimeOutputFile`
 
 ### 5. Run it
 

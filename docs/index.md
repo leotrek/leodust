@@ -19,7 +19,8 @@ If you are new to the project, use this order:
 4. [Changing Configurations](tutorials/changing-configurations.md)
 5. [Configuration Reference](reference/configuration.md)
 6. [Plugin Reference](reference/plugins.md)
-7. [Package and Type Map](reference/package-type-map.md)
+7. [Runtime Integration](reference/runtime-integration.md)
+8. [Package and Type Map](reference/package-type-map.md)
 
 ## What LeoDust Simulates
 
@@ -61,6 +62,7 @@ If you are preparing a Read the Docs site, the most important starting pages are
 - [First Simulation](tutorials/first-simulation.md)
 - [Runtime Assembly](tutorials/runtime-assembly.md)
 - [Plugin Reference](reference/plugins.md)
+- [Runtime Integration](reference/runtime-integration.md)
 - [Configuration Reference](reference/configuration.md)
 - [Runtime Components](reference/runtime-components.md)
 

@@ -36,7 +36,7 @@ func (d *DummySunStatePlugin) GetSunlightExposure(node types.Node) float64 {
 }
 
 func (d *DummySunStatePlugin) GetName() string {
-	return "DummyPlugin"
+	return "DummySunStatePlugin"
 }
 
 func (d *DummySunStatePlugin) GetType() reflect.Type {

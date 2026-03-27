@@ -24,6 +24,7 @@ The main simulator command lives in `go/cmd/leodust/main.go`.
 | `--simulationStateInputFile` | Replay from a precomputed `.gob` state |
 | `--simulationPlugins` | Comma-separated simulation plugin names |
 | `--statePlugins` | Comma-separated state plugin names |
+| `--runtimeOutputFile` | Write a live runtime reconciliation snapshot when `RuntimeReconcilePlugin` is enabled |
 | `--logLevel` | Runtime log-level override |
 | `--validateOrbit` | Validate orbit propagation before running |
 | `--validateOrbitOnly` | Validate orbit propagation and exit |
@@ -62,6 +63,19 @@ Replay from a precomputed state:
   --simulationStateInputFile ./results/precomputed/precomputed_data-local.gob
 ```
 
+Export runtime reconciliation snapshots:
+
+```bash
+./leodust \
+  --simulationConfig ./resources/configs/simulationAutorunConfig.yaml \
+  --islConfig ./resources/configs/islMstConfig.yaml \
+  --groundLinkConfig ./resources/configs/groundLinkNearestConfig.yaml \
+  --computingConfig ./resources/configs/computingConfig.yaml \
+  --routerConfig ./resources/configs/routerAStarConfig.yaml \
+  --simulationPlugins RuntimeReconcilePlugin \
+  --runtimeOutputFile ./results/runtime/live_runtime_plan.json
+```
+
 ### Supported Plugin Names
 
 For the full plugin model and authoring workflow, see [Plugin Reference](plugins.md).
@@ -69,6 +83,7 @@ For the full plugin model and authoring workflow, see [Plugin Reference](plugins
 Simulation plugins:
 
 - `DummyPlugin`
+- `RuntimeReconcilePlugin`
 
 State plugins:
 

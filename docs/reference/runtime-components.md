@@ -87,11 +87,12 @@ Important methods:
 Purpose:
 
 - map CLI plugin names to concrete simulation plugin instances
-- hold plugin-specific constructor inputs such as topology export paths
+- hold plugin-specific constructor inputs such as runtime snapshot output paths
 
 Important methods:
 
 - `WithTopologyOutputFile`
+- `WithRuntimeOutputFile`
 - `BuildPlugins`
 
 ### `stateplugin.DefaultStatePluginBuilder`

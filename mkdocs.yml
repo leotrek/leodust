@@ -26,6 +26,7 @@ nav:
   - Reference:
       - CLI: reference/cli.md
       - Plugins: reference/plugins.md
+      - Runtime Integration: reference/runtime-integration.md
       - Configuration: reference/configuration.md
       - Bundled Presets: reference/bundled-presets.md
       - Data Files: reference/data-files.md

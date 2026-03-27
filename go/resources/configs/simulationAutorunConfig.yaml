@@ -2,7 +2,7 @@ StepInterval: 1
 StepMultiplier: 10
 StepCount: 10
 LogLevel: info
-SatelliteDataSource: starlink_250.tle
+SatelliteDataSource: starlink_10_clean.tle
 SatelliteDataSourceType: tle
 GroundStationDataSource: ground_stations.yml
 GroundStationDataSourceType: yml
