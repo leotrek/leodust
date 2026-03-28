@@ -13,6 +13,8 @@ WORKER_NAMES_FILE=""
 IMAGE="ubuntu-minimal:22.04"
 MICROK8S_CHANNEL="1.30/stable"
 LXD_PROFILE_NAME=""
+NODE_IMAGE_ALIAS=""
+SANDBOX_IMAGE_ALIAS=""
 WORKER_COUNT="0"
 CONTAINER_CPU="2"
 CONTAINER_MEMORY="4GiB"
@@ -36,6 +38,7 @@ SATELLITE_ID=""
 SANDBOX_NAME=""
 SANDBOX_ROLE="endpoint"
 SANDBOX_HOST_WORKER=""
+SANDBOX_SPECS=""
 APP_NAME=""
 APP_COMMAND=""
 
@@ -58,6 +61,12 @@ declare -a WORKER_NODE_NAMES=()
 declare -a WORKER_CONTAINER_NAMES=()
 declare -a SELECTED_WORKER_NODE_NAMES=()
 declare -a SELECTED_WORKER_CONTAINER_NAMES=()
+declare -a FAST_INSTANCE_NAMES=()
+
+FAST_LXC_INSTANCE_CACHE_LOADED="false"
+FAST_LXC_RESOURCE_CACHE_LOADED="false"
+FAST_LXC_CACHE_SOURCE=""
+FAST_LXC_ASSOC_ARRAYS_INITIALIZED="false"
 
 log() {
     local level="$1"
@@ -109,6 +118,7 @@ Commands:
   create        Create the control-plane node and an initial set of workers
   add-workers   Add more worker containers and join them to the cluster
   sandbox-create Create or update a satellite sandbox without joining it to MicroK8s
+  sandbox-create-many Create or update multiple satellite sandboxes from --sandbox-specs
   sandbox-delete Delete a managed satellite sandbox
   sandbox-list  List live satellite sandboxes and their logical host-worker placement
   app-start     Start a managed application process inside a satellite sandbox
@@ -150,6 +160,7 @@ Options:
   --kubeconfig-output-file <file>
                                  Host path for exported kubeconfig (default: ./results/cluster/<cluster>-kubeconfig.yaml)
   --satellite-id <id>            Satellite identifier used for sandbox creation and lookup
+  --sandbox-specs <specs>        Semicolon-separated sandbox specs as satellite|role or satellite|role|host-worker
   --sandbox-name <name>          Explicit LXD container name for a satellite sandbox
   --sandbox-role <role>          Sandbox role: endpoint or relay (default: endpoint)
   --sandbox-host-worker <name>   Logical worker responsible for the sandbox; defaults to least-loaded worker
@@ -166,6 +177,7 @@ Examples:
   ./scripts/microk8s_cluster.sh create --cluster-name leodust --worker-names-file ./go/resources/tle/starlink_250.tle
   ./scripts/microk8s_cluster.sh add-workers --cluster-name leodust --workers 4
   ./scripts/microk8s_cluster.sh sandbox-create --cluster-name leodust --satellite-id STARLINK-3393
+  ./scripts/microk8s_cluster.sh sandbox-create-many --cluster-name leodust --sandbox-specs 'STARLINK-3393|endpoint;STARLINK-3394|relay'
   ./scripts/microk8s_cluster.sh app-start --cluster-name leodust --satellite-id STARLINK-3393 --app-name ping --app-command 'sleep 3600'
   ./scripts/microk8s_cluster.sh sandbox-list --cluster-name leodust
   ./scripts/microk8s_cluster.sh kubeconfig --cluster-name leodust
@@ -398,6 +410,260 @@ csv_item_count() {
     printf '%s\n' "${count}"
 }
 
+fast_lxc_metadata_supported() {
+    command -v jq >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1
+}
+
+initialize_fast_lxc_cache_storage() {
+    if [[ "${FAST_LXC_ASSOC_ARRAYS_INITIALIZED}" == "true" ]]; then
+        return 0
+    fi
+
+    declare -gA FAST_INSTANCE_STATUS=()
+    declare -gA FAST_INSTANCE_CLUSTER=()
+    declare -gA FAST_INSTANCE_KIND=()
+    declare -gA FAST_INSTANCE_ROLE=()
+    declare -gA FAST_INSTANCE_SATELLITE_ID=()
+    declare -gA FAST_INSTANCE_SANDBOX_ROLE=()
+    declare -gA FAST_INSTANCE_HOST_WORKER=()
+    declare -gA FAST_INSTANCE_APP_COUNT=()
+    declare -gA FAST_INSTANCE_MGMT_IP=()
+    declare -gA FAST_INSTANCE_SIM_IP=()
+    declare -gA FAST_INSTANCE_SIMULATION_NAME=()
+    declare -gA FAST_INSTANCE_WORKER_BASE=()
+    declare -gA FAST_INSTANCE_MGMT_NETWORK=()
+    declare -gA FAST_INSTANCE_SIM_NETWORK=()
+    declare -gA FAST_INSTANCE_PROFILE=()
+    declare -gA FAST_PROFILE_EXISTS=()
+    declare -gA FAST_NETWORK_EXISTS=()
+
+    FAST_LXC_ASSOC_ARRAYS_INITIALIZED="true"
+}
+
+load_fast_lxc_instance_cache() {
+    local instance_json="" name status cluster kind role satellite_id sandbox_role host_worker
+    local app_count mgmt_ip sim_ip simulation_name worker_base mgmt_network sim_network profile
+
+    if [[ "${FAST_LXC_INSTANCE_CACHE_LOADED}" == "true" ]]; then
+        return 0
+    fi
+
+    FAST_LXC_INSTANCE_CACHE_LOADED="true"
+    FAST_LXC_CACHE_SOURCE=""
+    initialize_fast_lxc_cache_storage
+    FAST_INSTANCE_NAMES=()
+    FAST_INSTANCE_STATUS=()
+    FAST_INSTANCE_CLUSTER=()
+    FAST_INSTANCE_KIND=()
+    FAST_INSTANCE_ROLE=()
+    FAST_INSTANCE_SATELLITE_ID=()
+    FAST_INSTANCE_SANDBOX_ROLE=()
+    FAST_INSTANCE_HOST_WORKER=()
+    FAST_INSTANCE_APP_COUNT=()
+    FAST_INSTANCE_MGMT_IP=()
+    FAST_INSTANCE_SIM_IP=()
+    FAST_INSTANCE_SIMULATION_NAME=()
+    FAST_INSTANCE_WORKER_BASE=()
+    FAST_INSTANCE_MGMT_NETWORK=()
+    FAST_INSTANCE_SIM_NETWORK=()
+    FAST_INSTANCE_PROFILE=()
+
+    binary_available lxc || return 1
+    fast_lxc_metadata_supported || return 1
+
+    instance_json="$(lxc_cmd list --format json 2>/dev/null || true)"
+    [[ -n "${instance_json}" ]] || return 1
+
+    if command -v jq >/dev/null 2>&1; then
+        FAST_LXC_CACHE_SOURCE="jq"
+        while IFS=$'\t' read -r name status cluster kind role satellite_id sandbox_role host_worker app_count mgmt_ip sim_ip simulation_name worker_base mgmt_network sim_network profile; do
+            [[ -n "${name}" ]] || continue
+            FAST_INSTANCE_NAMES+=("${name}")
+            FAST_INSTANCE_STATUS["${name}"]="${status}"
+            FAST_INSTANCE_CLUSTER["${name}"]="${cluster}"
+            FAST_INSTANCE_KIND["${name}"]="${kind}"
+            FAST_INSTANCE_ROLE["${name}"]="${role}"
+            FAST_INSTANCE_SATELLITE_ID["${name}"]="${satellite_id}"
+            FAST_INSTANCE_SANDBOX_ROLE["${name}"]="${sandbox_role}"
+            FAST_INSTANCE_HOST_WORKER["${name}"]="${host_worker}"
+            FAST_INSTANCE_APP_COUNT["${name}"]="${app_count:-0}"
+            FAST_INSTANCE_MGMT_IP["${name}"]="${mgmt_ip}"
+            FAST_INSTANCE_SIM_IP["${name}"]="${sim_ip}"
+            FAST_INSTANCE_SIMULATION_NAME["${name}"]="${simulation_name}"
+            FAST_INSTANCE_WORKER_BASE["${name}"]="${worker_base}"
+            FAST_INSTANCE_MGMT_NETWORK["${name}"]="${mgmt_network}"
+            FAST_INSTANCE_SIM_NETWORK["${name}"]="${sim_network}"
+            FAST_INSTANCE_PROFILE["${name}"]="${profile}"
+        done < <(
+            printf '%s\n' "${instance_json}" | jq -r '
+                .[] |
+                [
+                    .name,
+                    (.status // ""),
+                    (.config["user.leodust.cluster"] // ""),
+                    (.config["user.leodust.kind"] // "node"),
+                    (.config["user.leodust.role"] // ""),
+                    (.config["user.leodust.satellite-id"] // ""),
+                    (.config["user.leodust.sandbox-role"] // ""),
+                    (.config["user.leodust.host-worker"] // ""),
+                    (.config["user.leodust.app-count"] // "0"),
+                    (.config["user.leodust.management-ip"] // ""),
+                    (.config["user.leodust.simulation-ip"] // ""),
+                    (.config["user.leodust.simulation-name"] // ""),
+                    (.config["user.leodust.worker-base-name"] // ""),
+                    (.config["user.leodust.management-network"] // ""),
+                    (.config["user.leodust.simulation-network"] // ""),
+                    (.config["user.leodust.profile"] // (.profiles[0] // ""))
+                ] | @tsv
+            '
+        )
+    else
+        FAST_LXC_CACHE_SOURCE="python3"
+        while IFS=$'\t' read -r name status cluster kind role satellite_id sandbox_role host_worker app_count mgmt_ip sim_ip simulation_name worker_base mgmt_network sim_network profile; do
+            [[ -n "${name}" ]] || continue
+            FAST_INSTANCE_NAMES+=("${name}")
+            FAST_INSTANCE_STATUS["${name}"]="${status}"
+            FAST_INSTANCE_CLUSTER["${name}"]="${cluster}"
+            FAST_INSTANCE_KIND["${name}"]="${kind}"
+            FAST_INSTANCE_ROLE["${name}"]="${role}"
+            FAST_INSTANCE_SATELLITE_ID["${name}"]="${satellite_id}"
+            FAST_INSTANCE_SANDBOX_ROLE["${name}"]="${sandbox_role}"
+            FAST_INSTANCE_HOST_WORKER["${name}"]="${host_worker}"
+            FAST_INSTANCE_APP_COUNT["${name}"]="${app_count:-0}"
+            FAST_INSTANCE_MGMT_IP["${name}"]="${mgmt_ip}"
+            FAST_INSTANCE_SIM_IP["${name}"]="${sim_ip}"
+            FAST_INSTANCE_SIMULATION_NAME["${name}"]="${simulation_name}"
+            FAST_INSTANCE_WORKER_BASE["${name}"]="${worker_base}"
+            FAST_INSTANCE_MGMT_NETWORK["${name}"]="${mgmt_network}"
+            FAST_INSTANCE_SIM_NETWORK["${name}"]="${sim_network}"
+            FAST_INSTANCE_PROFILE["${name}"]="${profile}"
+        done < <(
+            printf '%s\n' "${instance_json}" | python3 -c '
+import json, sys
+
+def clean(value):
+    return str(value).replace("\t", " ").replace("\n", " ")
+
+instances = json.load(sys.stdin)
+for item in instances:
+    config = item.get("config") or {}
+    profiles = item.get("profiles") or []
+    row = [
+        item.get("name", ""),
+        item.get("status", ""),
+        config.get("user.leodust.cluster", ""),
+        config.get("user.leodust.kind", "node"),
+        config.get("user.leodust.role", ""),
+        config.get("user.leodust.satellite-id", ""),
+        config.get("user.leodust.sandbox-role", ""),
+        config.get("user.leodust.host-worker", ""),
+        config.get("user.leodust.app-count", "0"),
+        config.get("user.leodust.management-ip", ""),
+        config.get("user.leodust.simulation-ip", ""),
+        config.get("user.leodust.simulation-name", ""),
+        config.get("user.leodust.worker-base-name", ""),
+        config.get("user.leodust.management-network", ""),
+        config.get("user.leodust.simulation-network", ""),
+        config.get("user.leodust.profile", profiles[0] if profiles else ""),
+    ]
+    print("\t".join(clean(value) for value in row))
+'
+        )
+    fi
+
+    debug "Loaded cached LXD instance metadata for ${#FAST_INSTANCE_NAMES[@]} instances using ${FAST_LXC_CACHE_SOURCE}"
+    return 0
+}
+
+load_fast_lxc_resource_cache() {
+    local name
+
+    if [[ "${FAST_LXC_RESOURCE_CACHE_LOADED}" == "true" ]]; then
+        return 0
+    fi
+
+    FAST_LXC_RESOURCE_CACHE_LOADED="true"
+    initialize_fast_lxc_cache_storage
+    FAST_PROFILE_EXISTS=()
+    FAST_NETWORK_EXISTS=()
+
+    binary_available lxc || return 1
+
+    while IFS= read -r name; do
+        [[ -n "${name}" ]] || continue
+        FAST_PROFILE_EXISTS["${name}"]="1"
+    done < <(lxc_cmd profile list --format csv -c n 2>/dev/null || true)
+
+    while IFS= read -r name; do
+        [[ -n "${name}" ]] || continue
+        FAST_NETWORK_EXISTS["${name}"]="1"
+    done < <(lxc_cmd network list --format csv -c n 2>/dev/null || true)
+
+    return 0
+}
+
+managed_cluster_names_fast() {
+    local cluster_name inventory_file name found=0
+    declare -A seen_clusters=()
+
+    if [[ -d "${CLUSTER_RESULTS_DIR}" ]]; then
+        while IFS= read -r inventory_file; do
+            [[ -n "${inventory_file}" ]] || continue
+            cluster_name="$(inventory_value "${inventory_file}" cluster_name)"
+            if [[ -z "${cluster_name}" ]]; then
+                cluster_name="$(basename "${inventory_file}")"
+                cluster_name="${cluster_name%"${CLUSTER_INVENTORY_SUFFIX}"}"
+            fi
+            if [[ -n "${cluster_name}" && -z "${seen_clusters[${cluster_name}]:-}" ]]; then
+                seen_clusters["${cluster_name}"]="1"
+                printf '%s\n' "${cluster_name}"
+                found=1
+            fi
+        done < <(find "${CLUSTER_RESULTS_DIR}" -maxdepth 1 -type f -name "*${CLUSTER_INVENTORY_SUFFIX}" 2>/dev/null | sort)
+    fi
+
+    if load_fast_lxc_instance_cache; then
+        debug "Using cached LXD instance metadata for discovery"
+        for name in "${FAST_INSTANCE_NAMES[@]}"; do
+            cluster_name="${FAST_INSTANCE_CLUSTER[${name}]:-}"
+            [[ -n "${cluster_name}" ]] || continue
+            if [[ -z "${seen_clusters[${cluster_name}]:-}" ]]; then
+                seen_clusters["${cluster_name}"]="1"
+                printf '%s\n' "${cluster_name}"
+                found=1
+            fi
+        done
+    fi
+
+    (( found > 0 ))
+}
+
+fast_cache_has_legacy_candidates() {
+    local name
+
+    if ! load_fast_lxc_instance_cache; then
+        return 1
+    fi
+
+    for name in "${FAST_INSTANCE_NAMES[@]}"; do
+        [[ -n "${FAST_INSTANCE_CLUSTER[${name}]:-}" ]] && continue
+        case "${name}" in
+            master|master-*|*-master|*-master-*|control-plane|control-plane-*|*-control-plane|*-control-plane-*|controller|controller-*|*-controller|*-controller-*)
+                return 0
+                ;;
+        esac
+    done
+
+    return 1
+}
+
+fast_instance_exists() {
+    local name="$1"
+
+    load_fast_lxc_instance_cache >/dev/null 2>&1 || return 1
+    [[ "${FAST_INSTANCE_STATUS[${name}]+set}" == "set" ]]
+}
+
 join_csv() {
     local joined="" item
     for item in "$@"; do
@@ -611,6 +877,11 @@ parse_args() {
                 SATELLITE_ID="$2"
                 shift 2
                 ;;
+            --sandbox-specs)
+                (( $# >= 2 )) || fatal "--sandbox-specs requires a value"
+                SANDBOX_SPECS="$2"
+                shift 2
+                ;;
             --sandbox-name)
                 (( $# >= 2 )) || fatal "--sandbox-name requires a value"
                 SANDBOX_NAME="$2"
@@ -664,6 +935,8 @@ parse_args() {
     CONTROL_PLANE_NAME="${CONTROL_PLANE_NAME:-${CLUSTER_NAME}-control-plane}"
     WORKER_BASENAME="${WORKER_BASENAME:-${CLUSTER_NAME}-worker}"
     LXD_PROFILE_NAME="${LXD_PROFILE_NAME:-${CLUSTER_NAME}-node}"
+    NODE_IMAGE_ALIAS="${NODE_IMAGE_ALIAS:-${CLUSTER_NAME}-node-cache-$(sanitize_instance_name "${IMAGE}")}"
+    SANDBOX_IMAGE_ALIAS="${SANDBOX_IMAGE_ALIAS:-${CLUSTER_NAME}-sandbox-cache-$(sanitize_instance_name "${IMAGE}")}"
     MGMT_NETWORK_NAME="${MGMT_NETWORK_NAME:-${CLUSTER_NAME}-mgmt}"
     SIM_NETWORK_NAME="${SIM_NETWORK_NAME:-${CLUSTER_NAME}-sim}"
 
@@ -864,6 +1137,127 @@ EOF
     fi
 }
 
+image_alias_exists() {
+    local alias="$1"
+    lxc_cmd image show "${alias}" >/dev/null 2>&1
+}
+
+cached_image_alias_for_kind() {
+    local kind="$1"
+    case "${kind}" in
+        sandbox)
+            printf '%s\n' "${SANDBOX_IMAGE_ALIAS}"
+            ;;
+        *)
+            printf '%s\n' "${NODE_IMAGE_ALIAS}"
+            ;;
+    esac
+}
+
+base_packages_for_kind() {
+    local kind="$1"
+    case "${kind}" in
+        sandbox)
+            printf '%s\n' \
+                ca-certificates \
+                iproute2 \
+                iptables \
+                nftables \
+                netplan.io
+            ;;
+        *)
+            printf '%s\n' \
+                ca-certificates \
+                iproute2 \
+                iptables \
+                nftables \
+                netplan.io \
+                snapd
+            ;;
+    esac
+}
+
+ensure_container_packages() {
+    local name="$1"
+    shift
+
+    local package_name
+    local -a packages=("$@")
+    local -a missing_packages=()
+
+    for package_name in "${packages[@]}"; do
+        if ! container_has_package "${name}" "${package_name}" >/dev/null 2>&1; then
+            missing_packages+=("${package_name}")
+        fi
+    done
+
+    if (( ${#missing_packages[@]} == 0 )); then
+        return
+    fi
+
+    log INFO "Installing base packages in ${name}: ${missing_packages[*]}"
+    container_exec "${name}" "export DEBIAN_FRONTEND=noninteractive; apt-get update >/dev/null && apt-get install -y ${missing_packages[*]} >/dev/null"
+}
+
+prepare_container_for_image_publish() {
+    local name="$1"
+
+    container_exec "${name}" "apt-get clean >/dev/null 2>&1 || true"
+    container_exec "${name}" "cloud-init clean --logs --machine-id >/dev/null 2>&1 || cloud-init clean --logs >/dev/null 2>&1 || true"
+    container_exec "${name}" "truncate -s 0 /etc/machine-id >/dev/null 2>&1 || true; rm -f /var/lib/dbus/machine-id >/dev/null 2>&1 || true"
+}
+
+build_cached_launch_image() {
+    local kind="$1"
+    local alias seed_name
+
+    alias="$(cached_image_alias_for_kind "${kind}")"
+    [[ -n "${alias}" ]] || fatal "Missing cached image alias for kind ${kind}"
+
+    if image_alias_exists "${alias}"; then
+        debug "Cached image ${alias} already exists"
+        return
+    fi
+
+    seed_name="${alias}-seed"
+    if container_exists "${seed_name}"; then
+        log INFO "Removing stale image seed container ${seed_name}"
+        lxc_cmd stop "${seed_name}" --force >/dev/null 2>&1 || true
+        lxc_cmd delete "${seed_name}" >/dev/null 2>&1 || true
+    fi
+
+    log INFO "Building cached ${kind} image ${alias} from ${IMAGE}"
+    lxc_cmd launch -p "${LXD_PROFILE_NAME}" "${IMAGE}" "${seed_name}"
+    wait_for_container_boot "${seed_name}"
+    ensure_container_base_packages "${seed_name}" "${kind}"
+    configure_container_networking "${seed_name}"
+    prepare_container_for_image_publish "${seed_name}"
+    lxc_cmd stop "${seed_name}" --force >/dev/null 2>&1 || true
+    lxc_cmd publish "${seed_name}" --alias "${alias}" >/dev/null
+    lxc_cmd delete "${seed_name}" >/dev/null 2>&1 || true
+    log INFO "Cached ${kind} image ${alias} is ready"
+}
+
+provisioning_image_for_kind() {
+    local kind="$1"
+    local alias
+
+    alias="$(cached_image_alias_for_kind "${kind}")"
+    if ! image_alias_exists "${alias}"; then
+        build_cached_launch_image "${kind}"
+    fi
+
+    printf '%s\n' "${alias}"
+}
+
+delete_cached_image_if_present() {
+    local alias="$1"
+    if image_alias_exists "${alias}"; then
+        log INFO "Deleting cached image ${alias}"
+        lxc_cmd image delete "${alias}"
+    fi
+}
+
 host_setup() {
     log INFO "Preparing host dependencies and LXD resources for cluster ${CLUSTER_NAME}"
     require_host_tools
@@ -879,6 +1273,20 @@ host_setup() {
     write_cluster_inventory
     refresh_runtime_inventory
     log INFO "Host bootstrap completed"
+}
+
+ensure_runtime_host_setup() {
+    log INFO "Preparing runtime host resources for cluster ${CLUSTER_NAME}"
+    lxd_cmd waitready || fatal "LXD daemon is not ready"
+
+    if network_exists "${MGMT_NETWORK_NAME}" && network_exists "${SIM_NETWORK_NAME}" && profile_exists "${LXD_PROFILE_NAME}"; then
+        log INFO "Runtime host resources already exist; skipping full host bootstrap"
+        write_cluster_inventory
+        refresh_runtime_inventory
+        return
+    fi
+
+    host_setup
 }
 
 container_exists() {
@@ -999,6 +1407,23 @@ cluster_container_names() {
     local lxc_names_output legacy_node_names_output
     declare -A emitted_names=()
 
+    if load_fast_lxc_instance_cache; then
+        for name in "${FAST_INSTANCE_NAMES[@]}"; do
+            [[ -n "${name}" ]] || continue
+            cluster_tag="${FAST_INSTANCE_CLUSTER[${name}]:-}"
+            if [[ "${cluster_tag}" == "${CLUSTER_NAME}" || "${name}" == "${CONTROL_PLANE_NAME}" || "${name}" == "${WORKER_BASENAME}-"* ]] || worker_name_is_declared "${name}"; then
+                if [[ -z "${emitted_names[${name}]:-}" ]]; then
+                    printf '%s\n' "${name}"
+                    emitted_names["${name}"]="1"
+                    found=$((found + 1))
+                fi
+            fi
+        done
+        if (( found > 0 )); then
+            return 0
+        fi
+    fi
+
     binary_available lxc || return 0
     lxc_names_output="$(lxc_cmd list --format csv -c n 2>/dev/null || true)"
     if [[ -n "${lxc_names_output}" ]]; then
@@ -1058,6 +1483,17 @@ cluster_container_names() {
 container_kind() {
     local name="$1"
     local kind
+
+    if load_fast_lxc_instance_cache >/dev/null 2>&1 && [[ "${FAST_INSTANCE_KIND[${name}]+set}" == "set" ]]; then
+        kind="${FAST_INSTANCE_KIND[${name}]:-}"
+        if [[ -n "${kind}" ]]; then
+            printf '%s\n' "${kind}"
+        else
+            printf 'node\n'
+        fi
+        return 0
+    fi
+
     kind="$(lxc_cmd config get "${name}" user.leodust.kind 2>/dev/null || true)"
     if [[ -n "${kind}" ]]; then
         printf '%s\n' "${kind}"
@@ -1111,6 +1547,12 @@ sandbox_exists() {
 
 container_primary_profile() {
     local name="$1"
+
+    if load_fast_lxc_instance_cache >/dev/null 2>&1 && [[ "${FAST_INSTANCE_PROFILE[${name}]+set}" == "set" ]]; then
+        printf '%s\n' "${FAST_INSTANCE_PROFILE[${name}]}"
+        return 0
+    fi
+
     lxc_cmd config show "${name}" | awk '
         /^profiles:$/ {in_profiles=1; next}
         in_profiles == 1 && /^[^[:space:]-]/ {exit}
@@ -1155,21 +1597,24 @@ cluster_has_inventory() {
 }
 
 cluster_has_container_metadata() {
-    local name cluster_tag lxc_names_output
+    local name
 
-    binary_available lxc || return 1
-    lxc_names_output="$(lxc_cmd list --format csv -c n 2>/dev/null || true)"
-    if [[ -z "${lxc_names_output}" ]]; then
+    if load_fast_lxc_instance_cache; then
+        for name in "${FAST_INSTANCE_NAMES[@]}"; do
+            if [[ "${FAST_INSTANCE_CLUSTER[${name}]:-}" == "${CLUSTER_NAME}" ]]; then
+                return 0
+            fi
+        done
         return 1
     fi
 
+    binary_available lxc || return 1
     while IFS= read -r name; do
         [[ -n "${name}" ]] || continue
-        cluster_tag="$(lxc_cmd config get "${name}" user.leodust.cluster 2>/dev/null || true)"
-        if [[ "${cluster_tag}" == "${CLUSTER_NAME}" ]]; then
+        if [[ "$(lxc_cmd config get "${name}" user.leodust.cluster 2>/dev/null || true)" == "${CLUSTER_NAME}" ]]; then
             return 0
         fi
-    done <<< "${lxc_names_output}"
+    done < <(lxc_cmd list --format csv -c n 2>/dev/null || true)
 
     return 1
 }
@@ -1217,6 +1662,37 @@ hydrate_cluster_context_from_containers() {
     binary_available lxc || return 0
     if ! lxc_cmd list --format csv -c n >/dev/null 2>&1; then
         return 0
+    fi
+
+    if load_fast_lxc_instance_cache; then
+        for name in "${FAST_INSTANCE_NAMES[@]}"; do
+            [[ -n "${name}" ]] || continue
+            if [[ "${FAST_INSTANCE_CLUSTER[${name}]:-}" != "${CLUSTER_NAME}" && "${name}" != "${CONTROL_PLANE_NAME}" && "${name}" != "${WORKER_BASENAME}-"* ]] && ! worker_name_is_declared "${name}"; then
+                continue
+            fi
+            if [[ "${FAST_INSTANCE_KIND[${name}]:-node}" == "sandbox" ]]; then
+                continue
+            fi
+            [[ -n "${first_container}" ]] || first_container="${name}"
+            role="${FAST_INSTANCE_ROLE[${name}]:-}"
+            if [[ "${role}" == "control-plane" ]]; then
+                CONTROL_PLANE_NAME="${name}"
+                first_container="${name}"
+                break
+            fi
+        done
+
+        if [[ -n "${first_container}" ]]; then
+            value="${FAST_INSTANCE_WORKER_BASE[${first_container}]:-}"
+            [[ -n "${value}" ]] && WORKER_BASENAME="${value}"
+            value="${FAST_INSTANCE_MGMT_NETWORK[${first_container}]:-}"
+            [[ -n "${value}" ]] && MGMT_NETWORK_NAME="${value}"
+            value="${FAST_INSTANCE_SIM_NETWORK[${first_container}]:-}"
+            [[ -n "${value}" ]] && SIM_NETWORK_NAME="${value}"
+            value="${FAST_INSTANCE_PROFILE[${first_container}]:-}"
+            [[ -n "${value}" ]] && LXD_PROFILE_NAME="${value}"
+            return 0
+        fi
     fi
 
     legacy_control_plane="$(legacy_control_plane_for_cluster || true)"
@@ -1280,7 +1756,7 @@ sync_current_cluster_context() {
     return 0
 }
 
-managed_cluster_names() {
+managed_cluster_names_slow() {
     local cluster_name inventory_file name
     declare -A seen_clusters=()
     local lxc_names_output
@@ -1334,6 +1810,34 @@ managed_cluster_names() {
     return 0
 }
 
+managed_cluster_names() {
+    local fast_output slow_output cluster_name
+    declare -A seen_clusters=()
+
+    fast_output="$(managed_cluster_names_fast || true)"
+    if [[ -n "${fast_output}" ]]; then
+        while IFS= read -r cluster_name; do
+            [[ -n "${cluster_name}" ]] || continue
+            [[ -n "${seen_clusters[${cluster_name}]:-}" ]] && continue
+            seen_clusters["${cluster_name}"]="1"
+            printf '%s\n' "${cluster_name}"
+        done <<< "${fast_output}"
+
+        if fast_cache_has_legacy_candidates; then
+            slow_output="$(managed_cluster_names_slow || true)"
+            while IFS= read -r cluster_name; do
+                [[ -n "${cluster_name}" ]] || continue
+                [[ -n "${seen_clusters[${cluster_name}]:-}" ]] && continue
+                seen_clusters["${cluster_name}"]="1"
+                printf '%s\n' "${cluster_name}"
+            done <<< "${slow_output}"
+        fi
+        return 0
+    fi
+
+    managed_cluster_names_slow
+}
+
 single_discovered_cluster_name() {
     local cluster_name count=0 selected="" discovered_clusters_output
 
@@ -1381,27 +1885,16 @@ container_has_package() {
 
 ensure_container_base_packages() {
     local name="$1"
-    local packages=(
-        ca-certificates
-        iproute2
-        iptables
-        netplan.io
-        snapd
-    )
-    local package_name missing_packages=()
+    local kind="${2:-node}"
+    local package_name
+    local -a packages=()
 
-    for package_name in "${packages[@]}"; do
-        if ! container_has_package "${name}" "${package_name}" >/dev/null 2>&1; then
-            missing_packages+=("${package_name}")
-        fi
-    done
+    while IFS= read -r package_name; do
+        [[ -n "${package_name}" ]] || continue
+        packages+=("${package_name}")
+    done < <(base_packages_for_kind "${kind}")
 
-    if (( ${#missing_packages[@]} == 0 )); then
-        return
-    fi
-
-    log INFO "Installing base packages in ${name}: ${missing_packages[*]}"
-    container_exec "${name}" "export DEBIAN_FRONTEND=noninteractive; apt-get update >/dev/null && apt-get install -y ${missing_packages[*]} >/dev/null"
+    ensure_container_packages "${name}" "${packages[@]}"
 }
 
 configure_container_networking() {
@@ -1484,20 +1977,22 @@ launch_container() {
     local role="$2"
     local simulation_name="${3:-}"
     local kind="${4:-node}"
+    local launch_image
 
     if container_exists "${name}"; then
         log INFO "Container ${name} already exists"
         wait_for_container_boot "${name}"
-        ensure_container_base_packages "${name}"
+        ensure_container_base_packages "${name}" "${kind}"
         configure_container_networking "${name}"
         apply_container_metadata "${name}" "${role}" "${simulation_name}" "${kind}"
         return
     fi
 
-    log INFO "Launching container ${name} from ${IMAGE}"
-    lxc_cmd launch -p "${LXD_PROFILE_NAME}" "${IMAGE}" "${name}"
+    launch_image="$(provisioning_image_for_kind "${kind}")"
+    log INFO "Launching container ${name} from ${launch_image}"
+    lxc_cmd launch -p "${LXD_PROFILE_NAME}" "${launch_image}" "${name}"
     wait_for_container_boot "${name}"
-    ensure_container_base_packages "${name}"
+    ensure_container_base_packages "${name}" "${kind}"
     configure_container_networking "${name}"
     apply_container_metadata "${name}" "${role}" "${simulation_name}" "${kind}"
 }
@@ -1667,7 +2162,7 @@ launch_sandbox() {
 ensure_snapd_ready() {
     local name="$1"
 
-    container_exec "${name}" "export DEBIAN_FRONTEND=noninteractive; apt-get update >/dev/null && apt-get install -y snapd >/dev/null"
+    ensure_container_packages "${name}" snapd
     container_exec "${name}" "systemctl enable --now snapd.socket snapd.service >/dev/null 2>&1 || true"
     wait_until_container_exec "${name}" "snapd seeding in ${name}" "snap wait system seed.loaded"
 }
@@ -1943,20 +2438,53 @@ cleanup_runtime_inventory_files() {
     [[ ! -f "${output_file}" ]] || rm -f "${output_file}"
 }
 
-create_satellite_sandbox() {
-    local sandbox_name satellite_id host_worker
+ensure_satellite_sandbox() {
+    local satellite_id="$1"
+    local role="$2"
+    local host_worker="$3"
+    local sandbox_name
 
-    satellite_id="${SATELLITE_ID}"
     [[ -n "${satellite_id}" ]] || fatal "sandbox-create requires --satellite-id"
-    sandbox_name="$(resolve_sandbox_name)"
-    host_worker="${SANDBOX_HOST_WORKER}"
+    sandbox_name="$(sandbox_container_name_for_satellite "${satellite_id}")"
     if [[ -z "${host_worker}" ]]; then
         host_worker="$(auto_select_sandbox_host_worker)"
     fi
 
-    log INFO "Creating sandbox ${sandbox_name} for satellite ${satellite_id} role=${SANDBOX_ROLE} host-worker=${host_worker:-unassigned}"
-    host_setup
-    launch_sandbox "${sandbox_name}" "${satellite_id}" "${SANDBOX_ROLE}" "${host_worker}"
+    log INFO "Ensuring sandbox ${sandbox_name} for satellite ${satellite_id} role=${role} host-worker=${host_worker:-unassigned}"
+    launch_sandbox "${sandbox_name}" "${satellite_id}" "${role}" "${host_worker}"
+}
+
+create_satellite_sandbox() {
+    ensure_runtime_host_setup
+    ensure_satellite_sandbox "${SATELLITE_ID}" "${SANDBOX_ROLE}" "${SANDBOX_HOST_WORKER}"
+    refresh_runtime_inventory
+    sandbox_list
+}
+
+create_satellite_sandboxes() {
+    local spec satellite_id role host_worker
+    local -a specs=()
+
+    [[ -n "${SANDBOX_SPECS}" ]] || fatal "sandbox-create-many requires --sandbox-specs"
+    IFS=';' read -r -a specs <<< "${SANDBOX_SPECS}"
+
+    ensure_runtime_host_setup
+    for spec in "${specs[@]}"; do
+        spec="$(trim_whitespace "${spec}")"
+        [[ -n "${spec}" ]] || continue
+        IFS='|' read -r satellite_id role host_worker <<< "${spec}"
+        satellite_id="$(trim_whitespace "${satellite_id}")"
+        role="$(trim_whitespace "${role}")"
+        host_worker="$(trim_whitespace "${host_worker:-}")"
+        case "${role}" in
+            endpoint|relay)
+                ;;
+            *)
+                fatal "sandbox-create-many received invalid role '${role}' for satellite '${satellite_id}'"
+                ;;
+        esac
+        ensure_satellite_sandbox "${satellite_id}" "${role}" "${host_worker}"
+    done
     refresh_runtime_inventory
     sandbox_list
 }
@@ -1972,7 +2500,51 @@ delete_satellite_sandbox() {
     refresh_runtime_inventory
 }
 
+fast_sandbox_names_for_cluster() {
+    local name
+
+    load_fast_lxc_instance_cache >/dev/null 2>&1 || return 1
+    for name in "${FAST_INSTANCE_NAMES[@]}"; do
+        [[ -n "${name}" ]] || continue
+        [[ "${FAST_INSTANCE_CLUSTER[${name}]:-}" == "${CLUSTER_NAME}" ]] || continue
+        [[ "${FAST_INSTANCE_KIND[${name}]:-node}" == "sandbox" ]] || continue
+        printf '%s\n' "${name}"
+    done
+    return 0
+}
+
+sandbox_list_fast() {
+    local found=0 name
+
+    load_fast_lxc_instance_cache >/dev/null 2>&1 || return 1
+
+    log INFO "Satellite sandboxes for cluster ${CLUSTER_NAME}:"
+    while IFS= read -r name; do
+        [[ -n "${name}" ]] || continue
+        found=1
+        printf 'sandbox=%s satellite=%s role=%s host-worker=%s state=%s apps=%s management=%s simulation=%s\n' \
+            "${name}" \
+            "${FAST_INSTANCE_SATELLITE_ID[${name}]:-unknown}" \
+            "${FAST_INSTANCE_SANDBOX_ROLE[${name}]:-unknown}" \
+            "${FAST_INSTANCE_HOST_WORKER[${name}]:-unassigned}" \
+            "${FAST_INSTANCE_STATUS[${name}]:-UNKNOWN}" \
+            "${FAST_INSTANCE_APP_COUNT[${name}]:-0}" \
+            "${FAST_INSTANCE_MGMT_IP[${name}]:-unknown}" \
+            "${FAST_INSTANCE_SIM_IP[${name}]:-unknown}"
+    done < <(fast_sandbox_names_for_cluster)
+
+    if (( found == 0 )); then
+        log INFO "No satellite sandboxes found for cluster ${CLUSTER_NAME}"
+    fi
+
+    return 0
+}
+
 sandbox_list() {
+    if sandbox_list_fast; then
+        return 0
+    fi
+
     local found=0 name satellite_id sandbox_role host_worker mgmt_ip sim_ip app_count state
 
     log INFO "Satellite sandboxes for cluster ${CLUSTER_NAME}:"
@@ -2069,7 +2641,41 @@ stop_sandbox_application() {
     refresh_runtime_inventory
 }
 
+app_list_fast() {
+    local found=0 sandbox_name satellite_id host_worker app_name app_state pid started_at log_path
+    local inventory_file
+
+    inventory_file="$(app_inventory_file "${CLUSTER_NAME}")"
+    [[ -f "${inventory_file}" ]] || return 1
+
+    log INFO "Managed sandbox applications for cluster ${CLUSTER_NAME}:"
+    while IFS=$'\t' read -r sandbox_name satellite_id host_worker app_name app_state pid started_at log_path; do
+        [[ -n "${sandbox_name}" ]] || continue
+        [[ "${sandbox_name}" == "sandbox_name" ]] && continue
+        found=1
+        printf 'app=%s sandbox=%s satellite=%s host-worker=%s state=%s pid=%s started=%s log=%s\n' \
+            "${app_name}" \
+            "${sandbox_name}" \
+            "${satellite_id:-unknown}" \
+            "${host_worker:-unassigned}" \
+            "${app_state:-unknown}" \
+            "${pid:-unknown}" \
+            "${started_at:-unknown}" \
+            "${log_path:-unknown}"
+    done < "${inventory_file}"
+
+    if (( found == 0 )); then
+        log INFO "No managed sandbox applications found for cluster ${CLUSTER_NAME}"
+    fi
+
+    return 0
+}
+
 app_list() {
+    if app_list_fast; then
+        return 0
+    fi
+
     local found=0 sandbox_name app_name app_state satellite_id host_worker pid started_at log_path
 
     log INFO "Managed sandbox applications for cluster ${CLUSTER_NAME}:"
@@ -2236,7 +2842,144 @@ EOF"
     container_exec "${CONTROL_PLANE_NAME}" "microk8s kubectl get pods,svc -n ${namespace} -o wide"
 }
 
+list_clusters_fast() {
+    local found=0 cluster_name inventory_file container_count worker_count sandbox_count app_count
+    local control_plane_display inventory_state profile_state mgmt_state sim_state profile_name
+    local mgmt_network_name sim_network_name worker_base_name first_container value name kind role
+    local discovered_clusters_output
+    local -a cluster_instances=()
+
+    if fast_cache_has_legacy_candidates; then
+        return 1
+    fi
+
+    discovered_clusters_output="$(managed_cluster_names_fast || true)"
+    [[ -n "${discovered_clusters_output}" ]] || return 1
+
+    load_fast_lxc_instance_cache >/dev/null 2>&1 || true
+    load_fast_lxc_resource_cache >/dev/null 2>&1 || true
+
+    log INFO "Discovering managed MicroK8s clusters"
+    while IFS= read -r cluster_name; do
+        [[ -n "${cluster_name}" ]] || continue
+        found=1
+        log INFO "Inspecting cluster ${cluster_name}"
+
+        inventory_file="$(cluster_inventory_file "${cluster_name}")"
+        control_plane_display=""
+        profile_name=""
+        mgmt_network_name=""
+        sim_network_name=""
+        worker_base_name=""
+
+        if [[ -f "${inventory_file}" ]]; then
+            value="$(inventory_value "${inventory_file}" control_plane_name)"
+            [[ -n "${value}" ]] && control_plane_display="${value}"
+            value="$(inventory_value "${inventory_file}" worker_basename)"
+            [[ -n "${value}" ]] && worker_base_name="${value}"
+            value="$(inventory_value "${inventory_file}" lxd_profile_name)"
+            [[ -n "${value}" ]] && profile_name="${value}"
+            value="$(inventory_value "${inventory_file}" management_network_name)"
+            [[ -n "${value}" ]] && mgmt_network_name="${value}"
+            value="$(inventory_value "${inventory_file}" simulation_network_name)"
+            [[ -n "${value}" ]] && sim_network_name="${value}"
+        fi
+
+        cluster_instances=()
+        if [[ "${FAST_LXC_INSTANCE_CACHE_LOADED}" == "true" ]]; then
+            for name in "${FAST_INSTANCE_NAMES[@]}"; do
+                if [[ "${FAST_INSTANCE_CLUSTER[${name}]:-}" == "${cluster_name}" ]]; then
+                    cluster_instances+=("${name}")
+                fi
+            done
+        fi
+
+        if (( ${#cluster_instances[@]} == 0 )) && [[ ! -f "${inventory_file}" ]]; then
+            return 1
+        fi
+
+        container_count=0
+        worker_count=0
+        sandbox_count=0
+        app_count=0
+        first_container=""
+
+        for name in "${cluster_instances[@]}"; do
+            kind="${FAST_INSTANCE_KIND[${name}]:-node}"
+            if [[ "${kind}" == "sandbox" ]]; then
+                sandbox_count=$((sandbox_count + 1))
+                app_count=$((app_count + ${FAST_INSTANCE_APP_COUNT[${name}]:-0}))
+                continue
+            fi
+
+            container_count=$((container_count + 1))
+            [[ -n "${first_container}" ]] || first_container="${name}"
+            role="${FAST_INSTANCE_ROLE[${name}]:-}"
+            if [[ "${role}" == "control-plane" ]]; then
+                control_plane_display="${name}"
+                first_container="${name}"
+            else
+                worker_count=$((worker_count + 1))
+            fi
+        done
+
+        if [[ -n "${first_container}" ]]; then
+            [[ -n "${worker_base_name}" ]] || worker_base_name="${FAST_INSTANCE_WORKER_BASE[${first_container}]:-}"
+            [[ -n "${profile_name}" ]] || profile_name="${FAST_INSTANCE_PROFILE[${first_container}]:-}"
+            [[ -n "${mgmt_network_name}" ]] || mgmt_network_name="${FAST_INSTANCE_MGMT_NETWORK[${first_container}]:-}"
+            [[ -n "${sim_network_name}" ]] || sim_network_name="${FAST_INSTANCE_SIM_NETWORK[${first_container}]:-}"
+        fi
+
+        [[ -n "${control_plane_display}" ]] || control_plane_display="${cluster_name}-control-plane"
+        [[ -n "${worker_base_name}" ]] || worker_base_name="${cluster_name}-worker"
+        [[ -n "${profile_name}" ]] || profile_name="${cluster_name}-node"
+        [[ -n "${mgmt_network_name}" ]] || mgmt_network_name="${cluster_name}-mgmt"
+        [[ -n "${sim_network_name}" ]] || sim_network_name="${cluster_name}-sim"
+
+        if [[ -f "${inventory_file}" ]]; then
+            inventory_state="present"
+        else
+            inventory_state="missing"
+        fi
+
+        if [[ "${FAST_LXC_RESOURCE_CACHE_LOADED}" == "true" ]]; then
+            if [[ -n "${FAST_PROFILE_EXISTS[${profile_name}]:-}" ]]; then profile_state="present"; else profile_state="missing"; fi
+            if [[ -n "${FAST_NETWORK_EXISTS[${mgmt_network_name}]:-}" ]]; then mgmt_state="present"; else mgmt_state="missing"; fi
+            if [[ -n "${FAST_NETWORK_EXISTS[${sim_network_name}]:-}" ]]; then sim_state="present"; else sim_state="missing"; fi
+        else
+            profile_state="unknown"
+            mgmt_state="unknown"
+            sim_state="unknown"
+        fi
+
+        printf 'cluster=%s control-plane=%s containers=%s workers=%s sandboxes=%s apps=%s profile=%s(%s) management-network=%s(%s) simulation-network=%s(%s) inventory=%s\n' \
+            "${cluster_name}" \
+            "${control_plane_display}" \
+            "${container_count}" \
+            "${worker_count}" \
+            "${sandbox_count}" \
+            "${app_count}" \
+            "${profile_name}" \
+            "${profile_state}" \
+            "${mgmt_network_name}" \
+            "${mgmt_state}" \
+            "${sim_network_name}" \
+            "${sim_state}" \
+            "${inventory_state}"
+    done <<< "${discovered_clusters_output}"
+
+    if (( found == 0 )); then
+        log INFO "No discovered clusters found"
+    fi
+
+    return 0
+}
+
 list_clusters() {
+    if list_clusters_fast; then
+        return 0
+    fi
+
     local found=0 cluster_name inventory_file container_count worker_count sandbox_count app_count
     local control_plane_display inventory_state profile_state mgmt_state sim_state name role kind
     local script_managed="false"
@@ -2369,7 +3112,70 @@ list_clusters() {
     return 0
 }
 
+status_cluster_fast() {
+    local have_node_containers=0
+    local name role simulation_name
+
+    load_fast_lxc_instance_cache >/dev/null 2>&1 || return 1
+
+    log INFO "Collecting status for cluster ${CLUSTER_NAME}"
+    if ! binary_available lxc; then
+        log INFO "LXD is not installed on this host"
+        return 0
+    fi
+
+    log INFO "LXD node containers for cluster ${CLUSTER_NAME}:"
+    for name in "${FAST_INSTANCE_NAMES[@]}"; do
+        [[ -n "${name}" ]] || continue
+        if [[ "${FAST_INSTANCE_CLUSTER[${name}]:-}" != "${CLUSTER_NAME}" && "${name}" != "${CONTROL_PLANE_NAME}" && "${name}" != "${WORKER_BASENAME}-"* ]] && ! worker_name_is_declared "${name}"; then
+            continue
+        fi
+        if [[ "${FAST_INSTANCE_KIND[${name}]:-node}" == "sandbox" ]]; then
+            continue
+        fi
+        have_node_containers=1
+        role="${FAST_INSTANCE_ROLE[${name}]:-}"
+        if [[ -z "${role}" ]]; then
+            if [[ "${name}" == "${CONTROL_PLANE_NAME}" ]]; then
+                role="control-plane"
+            else
+                role="worker"
+            fi
+        fi
+        simulation_name="${FAST_INSTANCE_SIMULATION_NAME[${name}]:-}"
+        printf '  - %s role=%s simulation-name=%s management=%s simulation=%s\n' \
+            "${name}" \
+            "${role:-unknown}" \
+            "${simulation_name:-none}" \
+            "${FAST_INSTANCE_MGMT_IP[${name}]:-unknown}" \
+            "${FAST_INSTANCE_SIM_IP[${name}]:-unknown}"
+    done
+
+    if (( have_node_containers == 0 )); then
+        if ! cluster_has_inventory && ! cluster_has_container_metadata; then
+            return 1
+        fi
+        log INFO "No node containers found for cluster ${CLUSTER_NAME}"
+    fi
+
+    if (( have_node_containers > 0 )); then
+        if fast_instance_exists "${CONTROL_PLANE_NAME}" || container_exists "${CONTROL_PLANE_NAME}"; then
+            log INFO "MicroK8s nodes reported by ${CONTROL_PLANE_NAME}:"
+            container_exec "${CONTROL_PLANE_NAME}" "microk8s kubectl get nodes -o wide"
+        fi
+    fi
+
+    sandbox_list_fast || sandbox_list
+    app_list_fast || app_list
+
+    return 0
+}
+
 status_cluster() {
+    if status_cluster_fast; then
+        return 0
+    fi
+
     local have_node_containers=0
     local name role simulation_name mgmt_ip sim_ip
     local cluster_names_output
@@ -2509,6 +3315,9 @@ uninstall_cluster() {
         lxc_cmd profile delete "${LXD_PROFILE_NAME}"
     fi
 
+    delete_cached_image_if_present "${SANDBOX_IMAGE_ALIAS}"
+    delete_cached_image_if_present "${NODE_IMAGE_ALIAS}"
+
     if network_exists "${SIM_NETWORK_NAME}"; then
         log INFO "Deleting simulation network ${SIM_NETWORK_NAME}"
         lxc_cmd network delete "${SIM_NETWORK_NAME}"
@@ -2596,6 +3405,11 @@ main() {
             require_lxd_runtime
             sync_current_cluster_context
             create_satellite_sandbox
+            ;;
+        sandbox-create-many)
+            require_lxd_runtime
+            sync_current_cluster_context
+            create_satellite_sandboxes
             ;;
         sandbox-delete)
             require_lxd_runtime

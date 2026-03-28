@@ -44,3 +44,5 @@ Build the documentation locally:
 python -m pip install -r docs/requirements.txt
 mkdocs serve
 ```
+
+For cluster bootstrap, runtime-controller usage, and network verification steps, see [scripts/README.md](./scripts/README.md) and [runtime-controller/README.md](./runtime-controller/README.md).

@@ -15,6 +15,7 @@ The tool is intentionally opinionated:
 - the default node image is `ubuntu-minimal:22.04` to reduce per-node footprint while staying on an official Ubuntu base
 - when you provide `--worker-names-file`, worker container names are derived by sanitizing the simulation node names
 - the bootstrap can optionally write a JSON name-map file for external tooling or debugging
+- cluster nodes and satellite sandboxes now reuse cached LXD launch images after the first build so repeated launches do not reinstall the same base packages from scratch
 
 Note:
 
@@ -87,6 +88,14 @@ Create a live satellite sandbox without joining it to MicroK8s:
   --cluster-name leodust \
   --satellite-id STARLINK-3393 \
   --sandbox-role endpoint
+```
+
+Create or update multiple sandboxes in one call:
+
+```bash
+./scripts/microk8s_cluster.sh sandbox-create-many \
+  --cluster-name leodust \
+  --sandbox-specs 'STARLINK-3393|endpoint;STARLINK-3394|relay'
 ```
 
 Start an application inside that sandbox:
@@ -191,6 +200,97 @@ go run ./runtime-controller \
   --device eth1 \
   --dryRun=false
 ```
+
+The first container launch for a given cluster still has to build the cached node or sandbox image. After that, `create`, `add-workers`, and runtime-controller-driven sandbox creation reuse those cached images and should be substantially faster.
+
+## Verifying the Cluster Network
+
+Do not treat the generated topology snapshot by itself as proof that the cluster network is programmed.
+
+Use the files and commands below as separate checks:
+
+- `./go/results/topology/live_topology.json` proves the simulator computed a network graph
+- `./go/results/runtime/live_runtime_plan.json` proves the simulator exported an active runtime graph for workloads and routes
+- `./scripts/microk8s_cluster.sh status` and `test` prove the MicroK8s cluster is healthy on `eth0`
+- `sandbox-list` plus `ip route`, `iptables`, and `tc` inside a sandbox prove the runtime controller programmed the simulated network on `eth1`
+
+Check that the cluster itself is healthy:
+
+```bash
+./scripts/microk8s_cluster.sh status --cluster-name leodust
+./scripts/microk8s_cluster.sh test --cluster-name leodust
+```
+
+Check the generated topology snapshot:
+
+```bash
+jq '{version, time, generated_at, nodes: (.nodes|length), links: (.links|length)}' \
+  ./go/results/topology/live_topology.json
+```
+
+This confirms that the simulator generated a network snapshot. It does not prove that the runtime controller applied that topology to the cluster.
+
+Check whether the runtime export contains any active network to materialize:
+
+```bash
+jq '{generated_at, workloads: (.workloads|length), routes: (.routes|length)}' \
+  ./go/results/runtime/live_runtime_plan.json
+./scripts/microk8s_cluster.sh sandbox-list --cluster-name leodust
+```
+
+Interpretation:
+
+- if `workloads=0` and `routes=0`, the controller has no active runtime graph to apply yet
+- if workloads and routes are nonzero, you should also see live endpoint and relay sandboxes
+
+To generate a non-empty runtime graph for testing, run the simulator with both topology and runtime export enabled and inject a small number of synthetic workloads:
+
+```bash
+cd ./go
+
+go run ./cmd/leodust \
+  --simulationConfig ./resources/configs/simulationManualConfig-0250.yaml \
+  --islConfig ./resources/configs/islMstConfig.yaml \
+  --groundLinkConfig ./resources/configs/groundLinkNearestConfig.yaml \
+  --computingConfig ./resources/configs/computingConfig.yaml \
+  --routerConfig ./resources/configs/routerAStarConfig.yaml \
+  --simulationPlugins TopologyExportPlugin,RuntimeReconcilePlugin \
+  --injectTestWorkloads 2 \
+  --topologyOutputFile ./results/topology/live_topology.json \
+  --runtimeOutputFile ./results/runtime/live_runtime_plan.json
+```
+
+Then reconcile it into the cluster:
+
+```bash
+cd ..
+
+go run ./runtime-controller \
+  --runtimeFile ./go/results/runtime/live_runtime_plan.json \
+  --clusterName leodust \
+  --plugins sandboxes,links \
+  --device eth1 \
+  --dryRun=false
+```
+
+Once sandboxes exist, inspect one sandbox directly to verify that the simulated network is actually programmed on `eth1`:
+
+```bash
+lxc exec <sandbox-name> -- ip -4 addr show dev eth1
+lxc exec <sandbox-name> -- ip route show table 200
+lxc exec <sandbox-name> -- iptables -t mangle -S LEODUST-RUNTIME-MANGLE
+lxc exec <sandbox-name> -- tc qdisc show dev eth1
+```
+
+If `lxc` is not on `PATH`, use `/snap/bin/lxc`.
+
+What a working result looks like:
+
+- `status` and `test` succeed
+- `live_topology.json` updates over time
+- `live_runtime_plan.json` shows `workloads > 0` and `routes > 0`
+- `sandbox-list` shows active sandboxes
+- inside a sandbox, table `200`, chain `LEODUST-RUNTIME-MANGLE`, and `tc` state exist on `eth1`
 
 If you pass `--node-map-output-file`, the script writes `./results/cluster/<cluster>-node-map.json`. That file is now only for debugging or external tools; `runtime-controller` does not require it.
 
