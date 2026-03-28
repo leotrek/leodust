@@ -43,6 +43,11 @@ func main() {
 		2*time.Second,
 		"Polling interval used to watch the runtime snapshot file",
 	)
+	once := flag.Bool(
+		"once",
+		false,
+		"Apply the latest runtime snapshot once and exit instead of polling for changes",
+	)
 	pruneSandboxes := flag.Bool(
 		"pruneSandboxes",
 		true,
@@ -97,6 +102,18 @@ func main() {
 		env.DryRun,
 	)
 
+	if *once {
+		status, err := applyLatestSnapshot(*runtimeFile, plugins, env, "")
+		if err != nil {
+			fatalOnSnapshotError(*runtimeFile, err)
+		}
+		if !status.Loaded {
+			fatalf("Runtime snapshot %s was not loaded", *runtimeFile)
+		}
+		infof("Runtime controller processed snapshot once and is stopping")
+		return
+	}
+
 	ticker := time.NewTicker(*pollInterval)
 	defer ticker.Stop()
 	stop := make(chan os.Signal, 1)
@@ -105,7 +122,12 @@ func main() {
 
 	var lastSnapshotID string
 	for {
-		lastSnapshotID = applyLatestSnapshot(*runtimeFile, plugins, env, lastSnapshotID)
+		status, err := applyLatestSnapshot(*runtimeFile, plugins, env, lastSnapshotID)
+		if err != nil {
+			logSnapshotError(*runtimeFile, err)
+		} else {
+			lastSnapshotID = status.LastSnapshotID
+		}
 		select {
 		case <-stop:
 			infof("Runtime controller stopping")
@@ -115,33 +137,38 @@ func main() {
 	}
 }
 
-func applyLatestSnapshot(path string, plugins []Plugin, env Environment, lastSnapshotID string) string {
+type snapshotApplyStatus struct {
+	LastSnapshotID  string
+	Loaded          bool
+	SnapshotChanged bool
+}
+
+func applyLatestSnapshot(path string, plugins []Plugin, env Environment, lastSnapshotID string) (snapshotApplyStatus, error) {
+	status := snapshotApplyStatus{LastSnapshotID: lastSnapshotID}
 	snapshot, err := LoadSnapshot(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			debugf("Runtime snapshot %s does not exist yet", path)
-			return lastSnapshotID
-		}
-		warnf("Failed to load runtime snapshot: %v", err)
-		return lastSnapshotID
+		return status, err
 	}
+	status.Loaded = true
 
 	snapshotID := fmt.Sprintf("%d|%s", snapshot.Version, snapshot.Time.UTC().Format(time.RFC3339Nano))
 	if snapshotID == lastSnapshotID {
-		return lastSnapshotID
+		return status, nil
 	}
+	status.SnapshotChanged = true
 
 	desired, err := BuildDesiredState(snapshot, env.ClusterName)
 	if err != nil {
-		warnf("Failed to build desired runtime state for snapshot version %d: %v", snapshot.Version, err)
-		return lastSnapshotID
+		return status, fmt.Errorf("build desired runtime state for snapshot version %d: %w", snapshot.Version, err)
+	}
+	if message := runtimeIdleMessage(snapshot, desired); message != "" {
+		infof("%s", message)
 	}
 
 	for _, plugin := range plugins {
 		result, err := plugin.Reconcile(snapshot, desired, env)
 		if err != nil {
-			warnf("Plugin %s failed for runtime snapshot version %d: %v", plugin.Name(), snapshot.Version, err)
-			return lastSnapshotID
+			return status, fmt.Errorf("plugin %s failed for runtime snapshot version %d: %w", plugin.Name(), snapshot.Version, err)
 		}
 		infof(
 			"Plugin %s processed runtime snapshot version %d; changed=%d %s",
@@ -152,7 +179,41 @@ func applyLatestSnapshot(path string, plugins []Plugin, env Environment, lastSna
 		)
 	}
 
-	return snapshotID
+	status.LastSnapshotID = snapshotID
+	return status, nil
+}
+
+func runtimeIdleMessage(snapshot Snapshot, desired DesiredState) string {
+	switch {
+	case len(snapshot.Workloads) == 0 && len(snapshot.Routes) == 0 && len(desired.Nodes) == 0 && len(desired.Edges) == 0:
+		return fmt.Sprintf(
+			"Runtime snapshot version %d has no hosted workloads or routes; the controller has nothing to materialize and will remain idle until the snapshot changes. Place simulator services first or use --injectTestWorkloads on leodust for testing.",
+			snapshot.Version,
+		)
+	case len(snapshot.Workloads) > 0 && len(snapshot.Routes) == 0 && len(desired.Edges) == 0:
+		return fmt.Sprintf(
+			"Runtime snapshot version %d has %d hosted workload(s) but no inter-host routes; endpoint sandboxes can still be materialized, but link projection will stay idle until at least two workload-hosting nodes are active.",
+			snapshot.Version,
+			len(snapshot.Workloads),
+		)
+	default:
+		return ""
+	}
+}
+
+func logSnapshotError(path string, err error) {
+	if errors.Is(err, os.ErrNotExist) {
+		debugf("Runtime snapshot %s does not exist yet", path)
+		return
+	}
+	warnf("Failed to process runtime snapshot %s: %v", path, err)
+}
+
+func fatalOnSnapshotError(path string, err error) {
+	if errors.Is(err, os.ErrNotExist) {
+		fatalf("Runtime snapshot %s does not exist yet", path)
+	}
+	fatalf("Failed to process runtime snapshot %s: %v", path, err)
 }
 
 func parsePluginNames(value string) ([]string, error) {

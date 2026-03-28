@@ -77,6 +77,31 @@ func main() {
 		"",
 		"Path to continuously export runtime reconciliation snapshots when RuntimeReconcilePlugin is enabled",
 	)
+	injectTestWorkloads := flag.Int(
+		"injectTestWorkloads",
+		0,
+		"Place N synthetic test workloads on distinct nodes after load to exercise runtime-plan export",
+	)
+	injectTestWorkloadTarget := flag.String(
+		"injectTestWorkloadTarget",
+		"satellites",
+		"Synthetic workload target set: satellites, grounds, or all",
+	)
+	injectTestWorkloadCPU := flag.Float64(
+		"injectTestWorkloadCPU",
+		1,
+		"CPU requested by each synthetic test workload",
+	)
+	injectTestWorkloadMemory := flag.Float64(
+		"injectTestWorkloadMemory",
+		128,
+		"Memory requested by each synthetic test workload",
+	)
+	injectTestWorkloadPrefix := flag.String(
+		"injectTestWorkloadPrefix",
+		defaultInjectedWorkloadPrefix,
+		"Service-name prefix used for synthetic test workloads",
+	)
 	logLevelFlag := flag.String(
 		"logLevel",
 		"",
@@ -165,6 +190,15 @@ func main() {
 		simService = startSimulationIteration(*simulationConfig, *computingConfig, *routerConfig, *simulationStateInputFile, simulationPluginList, *topologyOutputFile, *runtimeOutputFile)
 	} else {
 		simService = startSimulation(*simulationConfig, *islConfigString, *groundLinkConfigString, *computingConfig, *routerConfig, simulationStateOutputFile, simulationPluginList, statePluginList, *topologyOutputFile, *runtimeOutputFile)
+	}
+	if err := injectSyntheticWorkloads(simService, workloadInjectionOptions{
+		Count:  *injectTestWorkloads,
+		CPU:    *injectTestWorkloadCPU,
+		Memory: *injectTestWorkloadMemory,
+		Target: *injectTestWorkloadTarget,
+		Prefix: *injectTestWorkloadPrefix,
+	}); err != nil {
+		logging.Fatalf("Failed to inject synthetic test workloads: %v", err)
 	}
 
 	runController(simService, *simulationConfig)

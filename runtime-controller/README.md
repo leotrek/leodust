@@ -27,6 +27,8 @@ go run ./runtime-controller \
   --dryRun=true
 ```
 
+Add `--once=true` if you want to process the latest snapshot once and exit instead of running as a watcher.
+
 To only reconcile sandboxes:
 
 ```bash
@@ -35,6 +37,8 @@ go run ./runtime-controller \
   --clusterName leodust \
   --plugins sandboxes
 ```
+
+If the runtime snapshot has no hosted workloads and no routes, the controller now logs that it is intentionally idle and suggests placing simulator services first or using `--injectTestWorkloads` for testing.
 
 ## How Link Projection Works
 
@@ -52,3 +56,4 @@ That means two application flows that both traverse `B-C` contend on the same `B
 - This controller only creates sandboxes and network state. It does not launch application processes yet.
 - Sandboxes do not join MicroK8s. The stable cluster nodes remain the only Kubernetes nodes.
 - The `links` plugin assumes all active sandboxes are attached to the simulation bridge and that `eth1` is the simulation interface.
+- The controller keeps polling until you stop it unless `--once=true` is set.

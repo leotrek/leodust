@@ -25,6 +25,11 @@ The main simulator command lives in `go/cmd/leodust/main.go`.
 | `--simulationPlugins` | Comma-separated simulation plugin names |
 | `--statePlugins` | Comma-separated state plugin names |
 | `--runtimeOutputFile` | Write a live runtime reconciliation snapshot when `RuntimeReconcilePlugin` is enabled |
+| `--injectTestWorkloads` | Place synthetic test workloads on distinct nodes after load to exercise runtime-plan export |
+| `--injectTestWorkloadTarget` | Synthetic workload target set: `satellites`, `grounds`, or `all` |
+| `--injectTestWorkloadCPU` | CPU requested by each synthetic test workload |
+| `--injectTestWorkloadMemory` | Memory requested by each synthetic test workload |
+| `--injectTestWorkloadPrefix` | Service-name prefix for synthetic test workloads |
 | `--logLevel` | Runtime log-level override |
 | `--validateOrbit` | Validate orbit propagation before running |
 | `--validateOrbitOnly` | Validate orbit propagation and exit |
@@ -73,6 +78,7 @@ Export runtime reconciliation snapshots:
   --computingConfig ./resources/configs/computingConfig.yaml \
   --routerConfig ./resources/configs/routerAStarConfig.yaml \
   --simulationPlugins RuntimeReconcilePlugin \
+  --injectTestWorkloads 2 \
   --runtimeOutputFile ./results/runtime/live_runtime_plan.json
 ```
 

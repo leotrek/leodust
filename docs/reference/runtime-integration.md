@@ -18,8 +18,11 @@ cd /Users/kenia/workspace/leodust/go
 ./leodust \
   --simulationConfig ./resources/configs/simulationManualConfig-0250.yaml \
   --simulationPlugins RuntimeReconcilePlugin \
+  --injectTestWorkloads 2 \
   --runtimeOutputFile ./results/runtime/live_runtime_plan.json
 ```
+
+`--injectTestWorkloads 2` is optional, but it is the quickest way to generate a non-empty runtime plan for controller testing. It places two synthetic services on distinct nodes before the first simulation step so the exported snapshot contains hosted workloads and a route between them.
 
 The runtime snapshot includes:
 
@@ -43,6 +46,8 @@ go run ./runtime-controller \
   --device eth1 \
   --dryRun=false
 ```
+
+For a one-shot reconciliation against the latest snapshot, add `--once=true`.
 
 The controller is internally plugin-driven.
 
@@ -72,6 +77,8 @@ go run ./runtime-controller \
   --clusterName leodust \
   --plugins none
 ```
+
+If the controller logs that the snapshot has no hosted workloads or routes, it is not stuck. It is waiting for a newer runtime snapshot with an active runtime graph.
 
 ## What Gets Materialized
 
