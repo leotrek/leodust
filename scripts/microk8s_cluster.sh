@@ -1227,7 +1227,7 @@ build_cached_launch_image() {
     fi
 
     log INFO "Building cached ${kind} image ${alias} from ${IMAGE}"
-    lxc_cmd launch -p "${LXD_PROFILE_NAME}" "${IMAGE}" "${seed_name}"
+    lxc_cmd launch -p "${LXD_PROFILE_NAME}" "${IMAGE}" "${seed_name}" >/dev/null
     wait_for_container_boot "${seed_name}"
     ensure_container_base_packages "${seed_name}" "${kind}"
     configure_container_networking "${seed_name}"

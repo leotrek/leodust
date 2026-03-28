@@ -176,7 +176,7 @@ func buildLinkApplyScript(device string, enableForwarding bool, plans []nextHopP
 	builder.WriteString("iptables -t mangle -C FORWARD -j \"$CHAIN\" 2>/dev/null || iptables -t mangle -I FORWARD 1 -j \"$CHAIN\"\n")
 	builder.WriteString("while ip rule del pref \"$RULE_PREF\" 2>/dev/null; do :; done\n")
 	builder.WriteString("ip rule add pref \"$RULE_PREF\" lookup \"$TABLE\" 2>/dev/null || true\n")
-	builder.WriteString("ip route flush table \"$TABLE\"\n")
+	builder.WriteString("ip route flush table \"$TABLE\" 2>/dev/null || true\n")
 	builder.WriteString("tc qdisc del dev \"$DEV\" root 2>/dev/null || true\n")
 	if len(plans) == 0 {
 		builder.WriteString("iptables -t mangle -A \"$CHAIN\" -j RETURN\n")

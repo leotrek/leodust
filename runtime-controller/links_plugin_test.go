@@ -20,6 +20,7 @@ func TestBuildLinkApplyScriptProgramsRoutesAndSharedClasses(t *testing.T) {
 
 	wantContains := []string{
 		`sysctl -w net.ipv4.ip_forward=1 >/dev/null`,
+		`ip route flush table "$TABLE" 2>/dev/null || true`,
 		`ip route replace table "$TABLE" 10.0.0.4/32 via 10.0.0.2 dev "$DEV" onlink`,
 		`ip route replace table "$TABLE" 10.0.0.5/32 via 10.0.0.2 dev "$DEV" onlink`,
 		`iptables -t mangle -A "$CHAIN" -d 10.0.0.4/32 -j MARK --set-mark 10`,
